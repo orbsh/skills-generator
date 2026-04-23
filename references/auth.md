@@ -23,29 +23,58 @@ description: 认证模块，包含用户身份验证（UserAuthClient）和后�
 
 ## 1. 配置项
 
-认证逻辑依赖 `settings.user_api` 配置，包含以下字段：
+认证逻辑依赖 `config.toml` 中的 `[auth]` 配置，包含以下字段：
 
 | 配置项 | 类型 | 必填 | 默认值 | 说明 |
 |--------|------|------|--------|------|
-| `url` | `str` | 是 | - | 用户信息 API 地址 |
-| `method` | `str` | 否 | `POST` | 请求方法 (GET/POST) |
-| `token_param` | `str` | 否 | `token` | 发送给 API 的 Token 参数名 |
-| `header_name` | `str` | 否 | `access-token` | 从请求头获取 Token 的 Header 名称 |
-| `cookie_name` | `str` | **是** | - | 从 Cookie 获取 Token 的名称（未配置将报错） |
+| `header_name` | `str` | 否 | `access-token` | HTTP Header 中 Token 的名称 |
+| `cookie_name` | `str` | 否 | `HrmApiCookie` | Cookie 中 Token 的名称 |
+| `ws_query_param` | `str` | 否 | `token` | WebSocket URL 查询参数中用于认证的参数名 |
+| `params_name` | `str` | 否 | `token` | URL 查询参数中 Token 的名称 |
+| `auth_method` | `list[str]` | 否 | `["query", "header", "cookie"]` | 按顺序尝试的认证方式列表 |
+
+**配置示例** (`config.toml`):
+
+```toml
+[auth]
+header_name = "access-token"        # HTTP Header 中 Token 的名称
+cookie_name = "HrmApiCookie"        # Cookie 中 Token 的名称
+ws_query_param = "token"            # WebSocket URL 查询参数中用于认证的参数名
+params_name = "token"               # URL 查询参数中 token 的名称
+auth_method = ["query", "header", "cookie"]  # 认证方式列表，按顺序尝试
+```
 
 ## 2. Token 获取流程
 
-系统按以下优先级获取 Token：
+系统支持两种认证客户端模式：
+
+### BackendApiClient（后端 API 请求）
+
+按 `auth_method` 列表顺序尝试不同认证方式，成功即返回：
 
 ```
-1. 请求头: request.headers.get(header_name)
+1. query:   URL 查询参数 (?token=xxx)
+        ↓ (失败时)
+2. header:  HTTP Header (access-token: xxx)
+        ↓ (失败时)
+3. cookie:  HTTP Cookie (HrmApiCookie=xxx)
+        ↓ (都失败时)
+4. 返回 None (认证失败)
+```
+
+### UserAuthClient（用户身份验证）
+
+从请求中提取 Token，调用 User API 验证身份：
+
+```
+1. 请求头: headers.get(header_name)
         ↓ (为空时)
-2. Cookie: request.cookies.get(cookie_name)
+2. Cookie: cookies.get(cookie_name)
         ↓ (都为空时)
 3. 返回 None (认证失败)
 ```
 
-**注意**: `cookie_name` 为严格必填项，若配置为空将直接记录错误并中断认证。
+**注意**: 以上配置项均为可选，只需确保至少有一种方式能够成功获取 Token 即可。
 
 ## 3. 调用 User API 验证
 
