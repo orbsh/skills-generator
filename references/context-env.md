@@ -32,7 +32,6 @@ Agent 框架将上下文对象展平为环境变量，命名规则为 `CONTEXT_{
 | `user_id` | `CONTEXT_USER_ID` |
 | `session_id` | `CONTEXT_SESSION_ID` |
 | `metadata.access_token` | `CONTEXT_METADATA_ACCESS_TOKEN` |
-| `metadata.cookies.HrmApiCookie` | `CONTEXT_METADATA_COOKIES_HRMAPICOOKIE` |
 
 ## 配置加载方法
 
@@ -42,8 +41,7 @@ Agent 框架将上下文对象展平为环境变量，命名规则为 `CONTEXT_{
 # assets/config.yaml
 context:
   user_id: "CONTEXT_USER_ID"
-  token: "CONTEXT_METADATA_COOKIES_HRMAPICOOKIE"
-  header_token: "CONTEXT_METADATA_ACCESS_TOKEN"
+  token: "CONTEXT_METADATA_ACCESS_TOKEN"
 ```
 
 ### 2. 在 Python 中读取
@@ -57,7 +55,7 @@ from scripts.utils.config import load_settings
 cfg = load_settings()
 
 # 使用映射后的环境变量名读取，避免硬编码
-token = os.environ.get(cfg.context.header_token) or os.environ.get(cfg.context.token)
+token = os.environ.get(cfg.context.token)
 ```
 
 ## 为什么需要映射层？
@@ -73,7 +71,7 @@ token = os.environ.get(cfg.context.header_token) or os.environ.get(cfg.context.t
 ```python
 from scripts.utils.auth import get_access_token_from_env
 
-# 自动尝试 Header 和 Cookie 映射
+# 从统一 Token 环境变量读取
 token = get_access_token_from_env(cfg.context)
 if not token:
     raise ValueError("未找到认证 Token")
@@ -87,7 +85,7 @@ if not token:
 
 ## 注意事项
 
-- `metadata` 下的嵌套字段会保留完整路径，如 `metadata.cookies.HrmApiCookie` → `CONTEXT_METADATA_COOKIES_HRMAPICOOKIE`。
+- `metadata` 下的嵌套字段会保留完整路径，如 `metadata.access_token` → `CONTEXT_METADATA_ACCESS_TOKEN`。
 - 所有环境变量名在展平时都会转换为**大写**。
 - 如果某个 context 字段未设置，对应的环境变量不会存在，读取时应进行空值检查。
 - **环境变量优先级高于 YAML 默认值**：`load_settings` 内部已实现 `env_settings` > `YamlConfigSettingsSource` 的优先级。
