@@ -141,7 +141,7 @@ if user:
 
 | 配置项 | 类型 | 必填 | 默认值 | 说明 |
 |--------|------|------|--------|------|
-| `auth_method` | `list[str]` | 是 | `["query", "header", "cookie"]` | 按顺序尝试的认证方式列表 |
+| `auth_method` | `list[str]` | 否 | `["query", "header", "cookie"]` | 按顺序尝试的认证方式列表 |
 | `header_name` | `str` | 否 | `access-token` | Header 中 Token 的名称 |
 | `cookie_name` | `str` | 否 | `HrmApiCookie` | Cookie 中 Token 的名称 |
 | `params_name` | `str` | 否 | `token` | URL 查询参数中 Token 的名称 |
@@ -157,21 +157,17 @@ if user:
 ### 使用示例
 
 ```python
-import os
-import httpx
-from scripts.utils.auth import BackendApiClient
+from scripts.utils.auth import BackendApiClient, get_access_token_from_env
 
-# 获取 Token（从上下文环境变量）
-header_token_val = os.environ.get(cfg.context.header_token)
-cookie_token_val = os.environ.get(cfg.context.token)
-access_token = header_token_val or cookie_token_val
+# 从统一 Token 环境变量获取
+access_token = get_access_token_from_env(cfg.context) or ""
 
 # 使用 BackendApiClient 按 auth_method 列表顺序尝试
 client = BackendApiClient(
-    auth_method=cfg.auth_method,
-    header_name=cfg.header_name,
-    cookie_name=cfg.cookie_name,
-    params_name=cfg.params_name,
+    auth_method=cfg.auth.auth_method,
+    header_name=cfg.auth.header_name,
+    cookie_name=cfg.auth.cookie_name,
+    params_name=cfg.auth.params_name,
     access_token=access_token,
 )
 
@@ -181,21 +177,19 @@ resp = client.request(api_url, params=params)
 或手动实现循环逻辑：
 
 ```python
-import os
 import httpx
+from scripts.utils.auth import get_access_token_from_env
 
-# 获取 Token（从上下文环境变量）
-header_token_val = os.environ.get(cfg.context.header_token)
-cookie_token_val = os.environ.get(cfg.context.token)
-access_token = header_token_val or cookie_token_val
+# 从统一 Token 环境变量获取
+access_token = get_access_token_from_env(cfg.context) or ""
 
 with httpx.Client(timeout=30.0) as client:
-    for method in cfg.auth_method:
-        headers = {cfg.header_name: access_token} if method == "header" else None
-        cookies = {cfg.cookie_name: access_token} if method == "cookie" else None
+    for method in cfg.auth.auth_method:
+        headers = {cfg.auth.header_name: access_token} if method == "header" else None
+        cookies = {cfg.auth.cookie_name: access_token} if method == "cookie" else None
         req_params = dict(params)
         if method == "query":
-            req_params[cfg.params_name] = access_token
+            req_params[cfg.auth.params_name] = access_token
 
         resp = client.get(api_url, params=req_params, headers=headers, cookies=cookies)
         if resp.status_code == 200:
@@ -206,13 +200,17 @@ with httpx.Client(timeout=30.0) as client:
 
 ```yaml
 # assets/config.yaml
+auth:
+  header_name: "access-token"
+  cookie_name: "HrmApiCookie"
+  params_name: "token"
+  auth_method: ["query", "header", "cookie"]  # 按顺序尝试
+
 order_api:
   url: "http://apinew.app-xmh.s/v1/orders/view"
-cookie_name: "HrmApiCookie"
-header_name: "access-token"
-params_name: "token"
-auth_method: ["query", "header", "cookie"]  # 按顺序尝试
 ```
+
+> **注意**: `auth` 配置段需在 Settings 类中定义为嵌套的 `BaseSettings` 模型才能被 `cfg.auth` 正确读取。
 
 ## 8. 日志追踪
 
