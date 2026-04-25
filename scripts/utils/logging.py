@@ -9,35 +9,36 @@ import structlog
 import logging
 import sys
 
-def setup_logging(logfile: str = "", project_root: Path | None = None):
+
+def setup_logging(log_file: str = ""):
     """
     配置 structlog 日志 - 终端 logfmt / 文件 JSONL
 
     Args:
-        logfile: 日志文件路径。空字符串输出到终端，指定路径输出到文件。
-                 相对路径将相对于 project_root 解析。
-        project_root: 项目根目录。未提供时自动向上推算至 skills/ 目录。
+        log_file: 日志文件路径。空字符串输出到终端，指定路径输出到文件。
+                  相对路径将相对于 SKILL 目录解析（代码中 skill_root 向上推 3 级）。
+                  如需输出到项目 logs 目录，在 config.yaml 中使用 ../../logs/xxx.log
     """
-    if project_root is None:
-        # 从当前模块 (utils/logging.py) 向上推算至项目根目录 (skills/)
-        project_root = Path(__file__).resolve().parent.parent.parent.parent
+    # SKILL 目录 = utils/logging.py 向上 3 级
+    skill_root = Path(__file__).resolve().parent.parent.parent
 
     shared_processors = [
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
     ]
 
-    if logfile:
+    if log_file:
         renderer = structlog.processors.JSONRenderer()
-        log_path = Path(logfile)
+        log_path = Path(log_file)
         if not log_path.is_absolute():
-            log_path = project_root / logfile
-            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path = skill_root / log_file
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler(str(log_path), encoding="utf-8")
     else:
         renderer = structlog.processors.LogfmtRenderer()
         handler = logging.StreamHandler(sys.stdout)
 
+    # 配置格式化器
     formatter = structlog.stdlib.ProcessorFormatter(
         processor=renderer,
         foreign_pre_chain=shared_processors,
@@ -58,6 +59,7 @@ def setup_logging(logfile: str = "", project_root: Path | None = None):
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
 
 # 预定义 logger 实例，供各模块直接导入使用
 logger = structlog.get_logger()

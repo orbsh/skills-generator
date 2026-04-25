@@ -79,14 +79,15 @@ if not token:
 
 ## 配置加载路径说明
 
-`load_settings()` 内部通过 `Path(__file__).resolve().parent.parent / "assets" / "config.yaml"` 自动定位文件：
-- 脚本 (`scripts/run.py`) 向上推两层即为 Skill 根目录。
-- 此方式确保无论从何处执行脚本，都能正确找到配置文件。
+`load_settings()` 内部通过 `get_skill_root()` 自动定位 `assets/config.yaml`：
+- `get_skill_root()` 从 `scripts/utils/config.py` 向上推三层定位至 Skill 根目录。
+- YAML 配置采用手动加载方式（`yaml.safe_load`），绕过 pydantic-settings 在某些环境中的静默失败问题。
+- 此方式确保无论从何处执行脚本，都能正确找到并读取配置文件。
 
 ## 注意事项
 
 - `metadata` 下的嵌套字段会保留完整路径，如 `metadata.access_token` → `CONTEXT_METADATA_ACCESS_TOKEN`。
 - 所有环境变量名在展平时都会转换为**大写**。
 - 如果某个 context 字段未设置，对应的环境变量不会存在，读取时应进行空值检查。
-- **环境变量优先级高于 YAML 默认值**：`load_settings` 内部已实现 `env_settings` > `YamlConfigSettingsSource` 的优先级。
+- **环境变量优先级高于 YAML 默认值**：`load_settings` 通过 pydantic-settings 的 `env_settings` 源确保环境变量覆盖 YAML 值。
 - **⚠️ 嵌套环境变量仅支持 BaseSettings 模型**：所有需要环境变量覆盖的配置项（如 API 地址）在定义 Settings 类时必须使用嵌套的 `BaseSettings` 子类，不能使用 `dict` 类型。

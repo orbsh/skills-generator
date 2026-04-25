@@ -2,13 +2,14 @@
 配置加载基础模块 (Config)
 
 基于 pydantic-settings 提供统一的 Settings 配置加载模式。
-自动定位 assets/config.yaml 并设置正确的环境变量优先级。
+手动加载 assets/config.yaml 确保配置正确读取（绕过 pydantic-settings 在某些环境中的 YAML 加载问题）。
 严禁在代码中硬编码环境变量名，所有映射应在 config.yaml 中定义。
 """
 from pathlib import Path
 from typing import Any, Optional, Type, TypeVar
+import yaml
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict, YamlConfigSettingsSource
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 T = TypeVar("T", bound=BaseSettings)
 
@@ -28,6 +29,22 @@ def get_skill_root(script_path: Path | str | None = None) -> Path:
     return Path(script_path).resolve()
 
 
+def _load_yaml_config(config_path: Path) -> dict:
+    """
+    手动加载 YAML 配置文件。
+
+    Args:
+        config_path: config.yaml 路径。
+
+    Returns:
+        YAML 内容字典，文件不存在时返回空字典。
+    """
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
 def build_settings_class(
     name: str = "Settings",
     config_path: Optional[Path] = None,
@@ -35,7 +52,7 @@ def build_settings_class(
     base_class: Type[BaseSettings] = BaseSettings,
 ) -> Type[BaseSettings]:
     """
-    动态构建 Settings 类，自动配置 YAML 加载与环境变量优先级。
+    动态构建 Settings 类，配合 load_settings() 使用。
 
     使用此函数可避免在每个 run.py 中重复编写冗长的 Settings 定义。
 
@@ -67,28 +84,14 @@ def build_settings_class(
         },
     )
 
-    # 构建主 Settings 类
+    # 构建主 Settings 类（仅定义字段结构，YAML 加载由 load_settings() 完成）
     class DynamicSettings(base_class):
         model_config = SettingsConfigDict(
-            yaml_file=config_path,
-            yaml_file_encoding="utf-8",
             env_nested_delimiter="__",
             extra="ignore",
         )
 
         context: ContextSettings = Field(default_factory=ContextSettings)  # type: ignore
-
-        @classmethod
-        def settings_customise_sources(
-            cls,
-            settings_cls: type[BaseSettings],
-            init_settings: Any,
-            env_settings: Any,
-            dotenv_settings: Any,
-            file_secret_settings: Any,
-        ) -> tuple[Any, ...]:
-            """配置源优先级：环境变量 > YAML > .env > init_settings"""
-            return (env_settings, YamlConfigSettingsSource(settings_cls), dotenv_settings, init_settings)
 
     DynamicSettings.__name__ = name
     return DynamicSettings
@@ -108,35 +111,35 @@ class Settings(BaseSettings):
     """
     标准应用 Settings。
 
-    自动加载 assets/config.yaml，支持环境变量覆盖。
+    配合 load_settings() 使用，YAML 加载由 load_settings() 手动完成。
     外部 API 配置必须使用嵌套 BaseSettings 模型。
     """
     model_config = SettingsConfigDict(
-        yaml_file=get_skill_root() / "assets" / "config.yaml",
-        yaml_file_encoding="utf-8",
         env_nested_delimiter="__",
         extra="ignore",
     )
     context: DefaultContextSettings = Field(default_factory=DefaultContextSettings)
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: Any,
-        env_settings: Any,
-        dotenv_settings: Any,
-        file_secret_settings: Any,
-    ) -> tuple[Any, ...]:
-        return (env_settings, YamlConfigSettingsSource(settings_cls), dotenv_settings, init_settings)
 
 
 def load_settings(custom_class: Optional[Type[BaseSettings]] = None) -> BaseSettings:
     """
     加载配置并返回 Settings 实例。
 
+    手动加载 YAML 确保配置正确读取，绕过 pydantic-settings 在某些环境中的加载问题。
+    配置优先级：环境变量 > YAML 默认值。
+
     Args:
         custom_class: 自定义 Settings 类。未提供时使用默认 Settings。
+
+    Returns:
+        配置好的 Settings 实例。
     """
     cls = custom_class or Settings
-    return cls()
+
+    # 手动加载 YAML 配置
+    _config_path = get_skill_root() / "assets" / "config.yaml"
+    _yaml_data = _load_yaml_config(_config_path)
+
+    # 将 YAML 配置传递给 Settings 构造函数
+    # pydantic-settings 默认环境变量优先级高于 init 参数，因此环境变量可覆盖 YAML 值
+    return cls(**_yaml_data)

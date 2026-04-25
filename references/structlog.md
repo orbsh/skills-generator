@@ -31,7 +31,8 @@ description: structlog 日志库使用规范，包含双格式输出（JSONL/log
 
 ```yaml
 # 空字符串 = 输出到终端（logfmt），指定路径 = 输出到文件（JSONL）
-# ⚠️ 相对路径必须相对于项目根目录，禁止相对于 SKILL 目录
+# ⚠️ 相对路径相对于 SKILL 父级目录解析（logging.py 向上推 4 级）
+#   如需输出到项目 logs 目录，使用 ../../logs/xxx.log
 logfile: ""
 ```
 

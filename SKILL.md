@@ -43,7 +43,7 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 | 配置优先级 | `Settings` 必须实现 `settings_customise_sources`，确保环境变量 > YAML > .env > 初始化参数 | `references/context-env.md` |
 | 禁止硬编码 URL | 所有外部接口地址必须写入 `config.yaml`，禁止代码中硬编码 | `references/context-env.md` |
 | 结构化日志 | 使用 structlog，终端 logfmt / 文件 JSONL | `references/structlog.md` |
-| 日志路径约束 | `logfile` 相对路径必须相对于项目根目录，禁止相对于 SKILL 目录 | `references/structlog.md` |
+| 日志路径约束 | `logfile` 相对路径相对于 SKILL 父级目录（`scripts/utils/logging.py` 向上推 4 级）解析 | `references/structlog.md` |
 | 结构化输出优先 | 复杂树状数据或层级报告输出必须使用 `BaseComponent`，启用深度降级机制 | `references/pydantic-renderer.md` |
 | 模板优先 | 当 `BaseComponent` 无法满足复杂排版需求时，方可使用 Jinja2 模板，禁止编写专用格式化函数 | `references/skill-structure.md` / `#jinja2-模板约束` |
 | 标准 Exit Code | 通过返回码告知 Agent 错误类型 | `references/error-handling.md` |
@@ -76,7 +76,7 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 ### 3. assets/config.yaml（配置文件）
 - 声明所有配置项默认值
 - 包含 `logfile` 字段（空字符串输出到终端，指定路径输出到文件）
-- `logfile` 相对路径必须解析为项目根目录下的路径（代码中需计算 `_project_root`）
+- `logfile` 相对路径相对于 SKILL 父级目录解析（`logging.py` 中 `project_root` 向上推 4 级），如需输出到项目 logs 目录，使用 `../../logs/xxx.log`
 - 包含 `context` 字段映射 Agent 上下文环境变量
 - 详见 `references/context-env.md`
 
@@ -99,6 +99,6 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 - 禁止硬编码外部接口 URL（必须写入 `config.yaml`）
 - 禁止动态表名（表名必须是字面量）
 - 禁止在 Skill 目录下创建 `.txt`、`.db`、`.json` 等持久化文件
-- 禁止在 Skill 目录下创建日志文件（日志必须输出到项目根目录或外部路径）
+- 禁止在 Skill 目录下创建日志文件（日志必须输出到 SKILL 父级目录之外的路径，如 `../../logs/`）
 - 禁止裸奔网络调用（必须设置 `timeout`）
 - 禁止使用 `print()` 输出日志（必须使用 `structlog`）

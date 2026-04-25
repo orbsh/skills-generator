@@ -205,7 +205,7 @@ if __name__ == "__main__":
 ## 脚本编写最佳实践
 
 ### 1. 配置管理
-- **使用 `load_settings()`**：自动加载 `assets/config.yaml` 并配置环境变量优先级，禁止手动编写冗长的 `Settings` 类。详见 `references/context-env.md`。
+- **使用 `load_settings()`**：内部手动加载 `assets/config.yaml`（绕过 pydantic-settings 在某些环境中的 YAML 加载问题），并支持环境变量覆盖。禁止手动编写冗长的 `Settings` 类。详见 `references/context-env.md`。
 - 外部 API 配置必须使用嵌套 `BaseSettings` 模型。
 
 ### 2. 日志与错误处理
