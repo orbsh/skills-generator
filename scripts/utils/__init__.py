@@ -8,7 +8,7 @@ from scripts.utils.components import (
 )
 from scripts.utils.logging import setup_logging, logger
 from scripts.utils.errors import ExitCode, raise_exit, ensure_config, handle_httpx_errors
-from scripts.utils.config import get_skill_root, build_settings_class, Settings, load_settings
+
 from scripts.utils.http import (
     HTTPClient,
     AsyncHTTPClient,
@@ -33,11 +33,6 @@ __all__ = [
     "raise_exit",
     "ensure_config",
     "handle_httpx_errors",
-    # Config
-    "get_skill_root",
-    "build_settings_class",
-    "Settings",
-    "load_settings",
     # HTTP
     "HTTPClient",
     "AsyncHTTPClient",

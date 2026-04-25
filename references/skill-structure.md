@@ -117,7 +117,7 @@ from typing import Optional
 # 导入通用工具模块
 from scripts.utils import (
     setup_logging,
-    load_settings,
+    # Settings 类直接定义在 run.py 中（详见 references/context-env.md）
     ExitCode,
     raise_exit,
     handle_httpx_errors,
@@ -128,7 +128,8 @@ from scripts.utils import (
 # ==================== 初始化 ====================
 
 # 1. 加载配置 (详见 references/context-env.md)
-cfg = load_settings()
+# 定义 Settings 类后实例化
+cfg = Settings()
 
 # 2. 初始化日志 (详见 references/structlog.md)
 setup_logging(cfg.logfile)
@@ -142,9 +143,18 @@ app = typer.Typer(
 )
 
 @app.callback(invoke_without_command=False)
-def main():
+def main(ctx: typer.Context):
     """CLI - 必须使用子命令调用"""
-    pass
+    setup_logging(cfg.logfile)
+    session_id = os.environ.get(cfg.context.session_id) or shortuuid.uuid()
+    user_id = os.environ.get(cfg.context.user_id) or f"anon-{shortuuid.uuid()[:8]}"
+
+    # 🔍 调试：打印包含双下划线的环境变量，排查嵌套变量加载问题
+    if cfg.debug:
+        nested_envs = {k: v for k, v in os.environ.items() if "__" in k}
+        logger.info("env-check", nested_env=str(nested_envs), loaded_api_url=cfg.api.url)
+
+    logger.info("app-start", auth_method=cfg.auth_method, session_id=session_id, user_id=user_id)
 
 # ==================== 已实现命令 ====================
 
@@ -205,7 +215,7 @@ if __name__ == "__main__":
 ## 脚本编写最佳实践
 
 ### 1. 配置管理
-- **使用 `load_settings()`**：内部手动加载 `assets/config.yaml`（绕过 pydantic-settings 在某些环境中的 YAML 加载问题），并支持环境变量覆盖。禁止手动编写冗长的 `Settings` 类。详见 `references/context-env.md`。
+- **内联 `Settings` 类**：直接在 `run.py` 中定义 `Settings(BaseSettings)`，配置 `yaml_file` 与 `settings_customise_sources`，确保环境变量 > YAML > 代码默认值。详见 `references/context-env.md`。
 - 外部 API 配置必须使用嵌套 `BaseSettings` 模型。
 
 ### 2. 日志与错误处理
@@ -226,7 +236,7 @@ if __name__ == "__main__":
 ├── scripts/
 │   ├── run.py
 │   │   ├── imports (typer, scripts.utils.*)
-│   │   ├── cfg = load_settings()
+│   │   ├── cfg = Settings()
 │   │   ├── setup_logging(cfg.logfile)
 │   │   ├── app = typer.Typer(...)
 │   │   ├── @app.command() implementations (使用 HTTPClient / raise_exit)
@@ -236,7 +246,6 @@ if __name__ == "__main__":
 │       ├── components.py     # [可选] 业务组件封装
 │       ├── logging.py        # [必选] structlog 初始化
 │       ├── errors.py         # [必选] ExitCode 与错误处理
-│       ├── config.py         # [必选] pydantic-settings 加载
 │       ├── http.py           # [推荐] HTTPClient 封装
 │       └── auth.py           # [可选] 用户认证
 └── assets/

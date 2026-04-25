@@ -13,7 +13,7 @@ description: 认证模块，包含用户身份验证（UserAuthClient）和后�
 
 完整的认证客户端已作为通用工具内置。在新建 Skill 时，请按以下步骤复用：
 
-1. **拷贝文件**：将 `scripts/utils/auth.py` 及其依赖 `scripts/utils/errors.py`、`scripts/utils/config.py` 拷贝至目标 Skill 的 `scripts/utils/` 目录下。
+1. **拷贝文件**：将 `scripts/utils/auth.py` 及其依赖 `scripts/utils/errors.py` 拷贝至目标 Skill 的 `scripts/utils/` 目录下。
 2. **导入使用**：在 `run.py` 中通过 `from scripts.utils.auth import UserAuthClient, BackendApiClient, get_access_token_from_env` 引入。
 3. **初始化客户端**：
    - **用户身份验证**：使用配置中的 `user_api` 字段实例化 `UserAuthClient(api_url=..., cookie_name=...)`。
@@ -23,7 +23,7 @@ description: 认证模块，包含用户身份验证（UserAuthClient）和后�
 
 ## 1. 配置项
 
-认证逻辑依赖 `config.toml` 中的 `[auth]` 配置，包含以下字段：
+认证逻辑依赖 `assets/config.yaml` 中的 `auth` 配置，包含以下字段：
 
 | 配置项 | 类型 | 必填 | 默认值 | 说明 |
 |--------|------|------|--------|------|
@@ -33,15 +33,15 @@ description: 认证模块，包含用户身份验证（UserAuthClient）和后�
 | `params_name` | `str` | 否 | `token` | URL 查询参数中 Token 的名称 |
 | `auth_method` | `list[str]` | 否 | `["query", "header", "cookie"]` | 按顺序尝试的认证方式列表 |
 
-**配置示例** (`config.toml`):
+**配置示例** (`assets/config.yaml`):
 
-```toml
-[auth]
-header_name = "access-token"        # HTTP Header 中 Token 的名称
-cookie_name = "HrmApiCookie"        # Cookie 中 Token 的名称
-ws_query_param = "token"            # WebSocket URL 查询参数中用于认证的参数名
-params_name = "token"               # URL 查询参数中 token 的名称
-auth_method = ["query", "header", "cookie"]  # 认证方式列表，按顺序尝试
+```yaml
+auth:
+  header_name: "access-token"
+  cookie_name: "HrmApiCookie"
+  ws_query_param: "token"
+  params_name: "token"
+  auth_method: ["query", "header", "cookie"]
 ```
 
 ## 2. Token 获取流程
@@ -105,9 +105,9 @@ API 返回成功后，自动兼容以下两种 JSON 结构解析用户信息：
 
 ```python
 from scripts.utils.auth import UserAuthClient, get_access_token_from_env
-from scripts.utils.config import load_settings
 
-cfg = load_settings()
+# 接 Settings 定义...
+cfg = Settings()
 
 # 方式 1: 通过环境变量获取 Token (适用于 CLI 脚本)
 token = get_access_token_from_env(cfg.context)
