@@ -7,6 +7,7 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 
 - `references/auth.md` - 用户认证登录逻辑
 - `references/context-env.md` - Agent 上下文环境变量映射规范
+- `references/out-of-band-injection.md` - 带外数据注入架构模式（安全传递身份/权限到执行环境）
 - `references/error-handling.md` - 错误处理与 Exit Code 规范
 - `references/httpx.md` - HTTP 客户端使用规范
 - `references/skill-structure.md` - SKILL.md 结构模板、多命令模式与 run.py 编写最佳实践
