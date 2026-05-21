@@ -44,7 +44,7 @@ description: NL-to-SQL 业务查询 Skill 架构分析与决策参考
 | 维度 | 新建 RDBMS（PostgreSQL/MySQL/SQLite） | Delta Lake（文件存储） |
 |---|---|---|
 | **服务依赖** | 需要运行中的数据库服务器进程 | 无服务器，纯文件存储 |
-| **Skill 约束** | 违背"无状态、可移植"原则 — Skill 需要知道 DB 连接串、管理连接池、处理断线重连 | 只读文件，开箱即用 |
+| **Skill 约束** | 违背"无状态"原则 — 数据库连接池、本地数据文件属于动态增长的**可变状态**，需持久化和同步 | 仅依赖**静态配置**（如 S3 连接串，不可变且无需同步）。数据状态全权委托给对象存储，Skill 实例仅作为计算节点，随时可销毁重建 |
 | **运维成本** | 备份、版本升级、连接数限制、磁盘监控、高可用配置 | 文件级操作，无额外服务 |
 | **同步复杂度** | 需要处理 CDC 或自定义 upsert 逻辑、事务管理、锁竞争 | 直接追加新文件，Delta 日志自动处理一致性 |
 | **多租户隔离** | 需要 schema/user/role 管理，或为每个租户建独立库 | 目录前缀隔离（`data/{tenant}/`），天然支持 |
@@ -65,9 +65,11 @@ Delta Lake 本质上是**带事务日志的文件存储**，不需要任何后�
 ### 关键差异：同步方式
 
 - **RDBMS 同步**：需要处理 upsert（插入或更新）、主键冲突、事务回滚。API 返回的数据可能包含更新，需要在 DB 端执行 `INSERT ... ON CONFLICT UPDATE` 逻辑
-- **Delta Lake 同步**：只需追加新数据文件，Delta 的事务日志自动保证一致性。如果需要去重/更新，在 query 阶段通过 SQL 的 `ROW_NUMBER() OVER (PARTITION BY id ORDER BY update_time DESC)` 取最新记录即可，**sync 阶段只需 append**
+- **Delta Lake + S3 同步**：
+  - **存储层**：数据存储在 S3 / 对象存储上，而非本地磁盘。Skill 实例不需要持久化卷，保持真正的无状态。
+  - **逻辑层**：只需追加新数据文件，Delta 的事务日志自动保证一致性。如果需要去重/更新，在 query 阶段通过 SQL 的 `ROW_NUMBER() OVER (...)` 取最新记录即可，**sync 阶段只需 append**
 
-这种"append-only + query-time dedup"的模式大幅降低了 sync 逻辑的复杂度。
+这种"append-only + query-time dedup"的模式大幅降低了 sync 逻辑的复杂度，同时利用 S3 实现了跨实例的数据共享。
 
 ---
 
@@ -317,9 +319,10 @@ data/{tenant}/{skill}/{table}/
 │                    ┌─── sync 阶段 ───────────────────────┐
 │                    │ 身份：PRIVILEGED_SYNC_USER（特权用户）│
 │                    │ 1. 查询 MAX(update_time)            │
+│                    │    (from S3 Delta Lake)             │
 │                    │ 2. API 取数：update_time > last      │
-│                    │ 3. delta.write（冲突重试）          │
-│                    │ 4. OPTIMIZE（文件数超阈值时）       │
+│                    │ 3. delta.write -> S3（冲突重试）    │
+│                    │ 4. OPTIMIZE -> S3（超阈值时）       │
 │                    │    （分区级别）                     │
 │                    │ 5. 更新表注册信息                   │
 │                    └─────────────────────────────────────┘
@@ -331,6 +334,7 @@ data/{tenant}/{skill}/{table}/
 │                    │ + 分区裁剪（org_prefix）            │
 │                    │ + LIMIT 1000 + 超时 30s             │
 │                    │ + 重试循环（最多 3 次）             │
+│                    │ + 数据源：S3 Delta Lake             │
 │                                      ▼
 │                    结果 → AI 格式化 → 用户
 └────────────────────────────────────────┘
@@ -340,7 +344,8 @@ data/{tenant}/{skill}/{table}/
 
 | 组件 | 技术选型 | 职责 |
 |---|---|---|
-| 存储 | Delta Lake | ACID 写入、compaction、碎片管理 |
+| **存储后端** | **S3 / 对象存储** | 提供全局共享的持久化层，支持并发访问，实现 Skill 无状态 |
+| 存储格式 | Delta Lake | ACID 事务日志、compaction、碎片管理（运行于 S3 之上） |
 | 写层 | `deltalake`（Rust/Python） | Sync：API 取数 → 写入 Delta Lake |
 | 读层 | DuckDB | Query：在 Delta Lake 上执行 SQL |
 | CLI | Typer | 脚本入口（接受 SQL 文本） |
