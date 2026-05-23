@@ -9,7 +9,6 @@ Delta Lake REQUIRES S3 / object storage — local filesystem paths are rejected.
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import duckdb
@@ -223,20 +222,34 @@ def write_records(
 
 # ── Query ───────────────────────────────────────────────────────────
 
-SELECT_RE = re.compile(r"^\s*SELECT\b", re.IGNORECASE)
-
-FORBIDDEN = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|REPLACE|MERGR|COPY|GRANT|REVOKE)\b",
-    re.IGNORECASE,
-)
+# Statement types allowed for read-only Delta Lake queries
+_ALLOWED_STMT_TYPES = frozenset({
+    "SELECT",   # normal queries, CTEs, subqueries
+    "PRAGMA",   # introspection commands
+    "ANALYZE",  # statistics collection
+    "EXPLAIN",  # query plan inspection
+})
 
 
 def validate_sql(sql: str) -> None:
-    """Reject non-SELECT and DDL/DML statements."""
-    if not SELECT_RE.match(sql):
-        raise ValueError(f"Query must start with SELECT, got: {sql[:80]}")
-    if FORBIDDEN.search(sql):
-        raise ValueError(f"Query contains forbidden keywords: {sql[:80]}")
+    """Validate SQL using DuckDB's parser — reject any non-SELECT statement."""
+    statements = duckdb.extract_statements(sql)
+    if not statements:
+        raise ValueError("Empty or unparseable SQL")
+    for stmt in statements:
+        type_name = stmt.type.name if hasattr(stmt.type, "name") else str(stmt.type)
+        if type_name not in _ALLOWED_STMT_TYPES:
+            raise ValueError(
+                f"Statement type {type_name} not allowed: {stmt.query[:100]}"
+            )
+        # Block data exfiltration via SELECT … INTO or COPY (some DuckDB
+        # versions parse COPY-to-file as SELECT-type).
+        upper = stmt.query.upper()
+        if " INTO " in upper or " COPY " in upper:
+            raise ValueError(
+                f"INTO/COPY not allowed (data exfiltration risk): {stmt.query[:100]}"
+            )
+
 
 
 def create_views(
