@@ -1,13 +1,26 @@
 ---
 name: analytics-api-pattern
-description: API 数据分析 Skill 生成模式 — 从接口描述 + 示例数据 → 完整可运行的 Analytics Skill
+description: API 数据分析（nl-to-sql）Skill 生成模式 — 从接口描述 + 示例数据 → 完整可运行的 Analytics Skill
 ---
 
-# API 数据分析 Skill 生成模式
+# API 数据分析 Skill 生成模式（nl-to-sql）
+
+## 术语定义：Analytics vs Search/Query
+
+**在本 skill 的上下文中，术语有严格区分：**
+
+| 术语 | 模式 | 数据流 | 典型用途 |
+|------|------|--------|----------|
+| **Analytics（数据分析）** | nl-to-sql | API → 同步到 Delta Lake → SQL 查询 | 跨时间趋势、多表聚合、复杂过滤 |
+| **Search / Query（搜索/查询）** | nl-to-api | 直接调 API 接口 → 过滤/分页 | 单条记录查找、实时状态查询、简单列表 |
+
+**核心区别：** Analytics 不是直接查接口。它先把数据全量/增量同步到一个专用的 OLAP 数据库（Delta Lake），然后用 SQL 从本地数据库查询。Search/Query 则是直接用自然语言构造 API 请求参数，调用接口获取结果。
+
+本模式文档只覆盖 **Analytics（nl-to-sql）** 场景。nl-to-api 场景不属于本模式范畴。
 
 ## 概述
 
-企业级应用中，数据分析是最常见的场景之一。本模式定义了 **从 API 接口描述生成完整数据分析 Skill** 的标准流程。
+企业级应用中，**数据分析（nl-to-sql）** 是最常见的场景之一。本模式定义了 **从 API 接口描述生成完整 Analytics Skill** 的标准流程。
 
 用户输入：
 1. **接口描述** — "这是用户订单接口，返回订单列表"
