@@ -15,7 +15,7 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 - `references/surrealdb.md` - SurrealDB 使用规范
 - `references/jinja2-templates.md` - Jinja2 模板编写约束与最佳实践
 - `references/pydantic-renderer.md` - Pydantic 渲染基类规范（Level-Aware 深度感知与 Markdown/YAML 自动降级）
-- `references/nl-to-sql-architecture.md` - NL-to-SQL 业务查询 Skill 架构分析与决策参考（Delta Lake + DuckDB + sync-on-query）
+- `references/analytics-api-pattern.md` - API 数据分析 Skill 生成模式（从接口描述 + 示例数据 → 完整 Skill 的标准流程）
 
 # Claude/OpenClaw SKILLs 架构协议
 

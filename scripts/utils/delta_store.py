@@ -1,0 +1,276 @@
+"""
+Generic Delta Lake store — schema-driven write and query.
+
+Pure data layer: no API knowledge, no HTTP calls.
+Operates on table schemas + Polars DataFrames only.
+Reusable across any scenario that needs Delta Lake I/O.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any
+
+import duckdb
+import polars as pl
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# ── Shared config (imported by skill run.py) ────────────────────────
+
+class StorageConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    root: str = "/data/delta"
+    tenant: str = "default"
+
+
+# ── Type map (shared short-name → Polars/DuckDB) ────────────────────
+
+TYPE_MAP: dict[str, dict[str, str]] = {
+    "i8":          {"polars": "Int8",          "duckdb": "TINYINT"},
+    "i16":         {"polars": "Int16",         "duckdb": "SMALLINT"},
+    "i32":         {"polars": "Int32",         "duckdb": "INTEGER"},
+    "i64":         {"polars": "Int64",         "duckdb": "BIGINT"},
+    "u8":          {"polars": "UInt8",         "duckdb": "UTINYINT"},
+    "u16":         {"polars": "UInt16",        "duckdb": "USMALLINT"},
+    "u32":         {"polars": "UInt32",        "duckdb": "UINTEGER"},
+    "u64":         {"polars": "UInt64",        "duckdb": "UBIGINT"},
+    "f32":         {"polars": "Float32",       "duckdb": "FLOAT"},
+    "f64":         {"polars": "Float64",       "duckdb": "DOUBLE"},
+    "str":         {"polars": "String",        "duckdb": "VARCHAR"},
+    "bool":        {"polars": "Boolean",       "duckdb": "BOOLEAN"},
+    "date":        {"polars": "Date",          "duckdb": "DATE"},
+    "time":        {"polars": "Time",          "duckdb": "TIME"},
+    "datetime":    {"polars": "Datetime('us')","duckdb": "TIMESTAMP"},
+    "timestamptz": {"polars": "Datetime('us','UTC')", "duckdb": "TIMESTAMP WITH TIME ZONE"},
+    "duration":    {"polars": "Duration('us')","duckdb": "INTERVAL"},
+    "binary":      {"polars": "Binary",        "duckdb": "BLOB"},
+    "json":        {"polars": "String",        "duckdb": "JSON"},
+}
+
+
+def polars_dtype(type_str: str) -> pl.DataType:
+    """Convert a short type name to a Polars dtype."""
+    return getattr(pl, TYPE_MAP[type_str]["polars"])
+
+
+def duckdb_type(type_str: str) -> str:
+    """Convert a short type name to a DuckDB SQL type."""
+    return TYPE_MAP[type_str]["duckdb"]
+
+
+# ── Path resolution ─────────────────────────────────────────────────
+
+def delta_path(table_cfg: dict, storage_root: str, tenant: str) -> str:
+    """Resolve the filesystem/S3 path for a table."""
+    return f"{storage_root}/{tenant}/{table_cfg['name']}"
+
+
+# ── Table lifecycle ─────────────────────────────────────────────────
+
+def table_exists(path: str) -> bool:
+    """Check if a Delta table exists at the given path."""
+    from deltalake import DeltaTable
+    from deltalake.exceptions import TableNotFoundError
+    try:
+        DeltaTable(path)
+        return True
+    except (TableNotFoundError, Exception):
+        return False
+
+
+def open_or_create_table(table_cfg: dict, path: str) -> Any:
+    """Open existing Delta table or create one from schema."""
+    from deltalake import DeltaTable, write_deltalake
+
+    if not table_exists(path):
+        schema_fields = []
+        for f in table_cfg["fields"]:
+            if f.get("generated"):
+                continue
+            dtype = polars_dtype(f["type"])
+            series = pl.Series(f["name"], [], dtype=dtype)
+            schema_fields.append(series)
+        empty_df = pl.DataFrame({s.name: s for s in schema_fields})
+        write_deltalake(path, empty_df, mode="overwrite")
+
+    return DeltaTable(path)
+
+
+def last_update(table: Any, update_field: str) -> str | None:
+    """Get max(update_field) from an existing Delta table via DuckDB."""
+    con = duckdb.connect()
+    try:
+        rows = con.execute(
+            f"SELECT max(\"{update_field}\") FROM delta_scan('{table.table_uri}')"
+        ).fetchone()
+        return rows[0] if rows and rows[0] else None
+    finally:
+        con.close()
+
+
+# ── Write ───────────────────────────────────────────────────────────
+
+def write_records(
+    table_cfg: dict,
+    records: list[dict],
+    storage_root: str,
+    tenant: str = "default",
+    generated_values: dict[str, str] | None = None,
+) -> int:
+    """
+    Write raw records to a Delta table based on schema.
+
+    Args:
+        table_cfg:      Table definition (name, fields with types + originals).
+        records:        List of dicts with API-field keys (matching `original` or `name`).
+        storage_root:   Root path for all delta tables.
+        tenant:         Tenant subdirectory.
+        generated_values:  Dict of generated field name → value (e.g. {"org_path": "/a/b"}).
+
+    Returns:
+        Number of records written.
+    """
+    from deltalake import write_deltalake
+
+    if not records:
+        return 0
+
+    path = delta_path(table_cfg, storage_root, tenant)
+
+    # Build rename map (original → name)
+    rename_map = {}
+    for f in table_cfg["fields"]:
+        if f.get("original") and f["original"] != f["name"]:
+            rename_map[f["original"]] = f["name"]
+
+    # Collect expected API keys
+    api_keys = [f.get("original", f["name"]) for f in table_cfg["fields"] if not f.get("generated")]
+
+    # Filter and keep only declared keys
+    filtered = [{k: r.get(k) for k in api_keys if k in r} for r in records]
+
+    df = pl.DataFrame(filtered)
+
+    # Rename columns to canonical names
+    if rename_map:
+        df = df.rename(rename_map)
+
+    # Cast to declared types
+    for f in table_cfg["fields"]:
+        if not f.get("generated") and f["type"] in TYPE_MAP:
+            try:
+                df = df.with_columns(pl.col(f["name"]).cast(polars_dtype(f["type"])))
+            except Exception:
+                pass
+
+    # Inject generated fields
+    if generated_values:
+        for f in table_cfg["fields"]:
+            if f.get("generated") and f["name"] in generated_values:
+                df = df.with_columns(pl.lit(generated_values[f["name"]]).alias(f["name"]))
+
+    write_deltalake(path, df, mode="append")
+    return len(df)
+
+
+# ── Query ───────────────────────────────────────────────────────────
+
+SELECT_RE = re.compile(r"^\s*SELECT\b", re.IGNORECASE)
+
+FORBIDDEN = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|REPLACE|MERGR|COPY|GRANT|REVOKE)\b",
+    re.IGNORECASE,
+)
+
+
+def validate_sql(sql: str) -> None:
+    """Reject non-SELECT and DDL/DML statements."""
+    if not SELECT_RE.match(sql):
+        raise ValueError(f"Query must start with SELECT, got: {sql[:80]}")
+    if FORBIDDEN.search(sql):
+        raise ValueError(f"Query contains forbidden keywords: {sql[:80]}")
+
+
+def create_views(con: duckdb.DuckDBPyConnection, tables: list[dict], storage_root: str, tenant: str) -> None:
+    """Register each table as a DuckDB VIEW over delta_scan."""
+    for t in tables:
+        dp = delta_path(t, storage_root, tenant)
+        con.execute(f"CREATE VIEW {t['name']} AS SELECT * FROM delta_scan('{dp}')")
+
+
+def query(
+    sql: str,
+    tables: list[dict],
+    storage_root: str,
+    tenant: str = "default",
+    org_path: str | None = None,
+    default_limit: int = 1000,
+) -> pl.DataFrame:
+    """
+    Execute a read-only SQL query against Delta tables via DuckDB.
+
+    Args:
+        sql:            SELECT statement (table names must match config).
+        tables:         Table definitions from config.
+        storage_root:   Root path for delta tables.
+        tenant:         Tenant subdirectory.
+        org_path:       Optional org prefix for row-level security filter.
+        default_limit:  Default LIMIT if not present in SQL.
+
+    Returns:
+        Polars DataFrame with query results.
+    """
+    validate_sql(sql)
+
+    con = duckdb.connect()
+    con.execute("SET statement_timeout='30s'")
+
+    try:
+        create_views(con, tables, storage_root, tenant)
+
+        safe_sql = sql.rstrip().rstrip(";")
+        if org_path:
+            safe_sql += f" WHERE org_path LIKE '{org_path}%'"
+        if "LIMIT" not in safe_sql.upper():
+            safe_sql += f" LIMIT {default_limit}"
+
+        result = con.execute(safe_sql).fetchdf()
+        return pl.DataFrame(result)
+    finally:
+        con.close()
+
+
+# ── Schema description generators (for SKILL.md / AI prompt) ────────
+
+def generate_schema_description(tables: list[dict]) -> str:
+    """
+    Generate AI schema context from table configs.
+
+    Used in generated SKILL.md and prompt.md.j2 so the AI
+    knows available tables/columns without a separate discovery call.
+    """
+    lines: list[str] = []
+    lines.append("You are a SQL generator. Available tables:\n")
+    for t in tables:
+        lines.append(f"Table: {t['name']} — {t['description']}")
+        for f in t["fields"]:
+            if f.get("generated"):
+                continue
+            lines.append(f"  - {f['name']} ({f['type']}): {f['description']}")
+        lines.append("")
+    lines.append("Rules:")
+    lines.append("- Only generate SELECT statements")
+    lines.append("- Do NOT include WHERE org_path — it will be auto-appended")
+    lines.append("- Column names must match exactly as listed above")
+    return "\n".join(lines)
+
+
+def generate_skill_description(tables: list[dict]) -> str:
+    """
+    Generate a short human-readable description for the SKILL.md frontmatter.
+
+    Example: "Query product sales and inventory data via natural language -> SQL"
+    """
+    table_names = ", ".join(t["name"] for t in tables)
+    topics = ", ".join(t["description"] for t in tables)
+    return f"Query {table_names} ({topics}) via natural language -> SQL on Delta Lake"
