@@ -19,6 +19,16 @@ description: 数据分析（nl-to-sql）Skill 生成模式：API → 同步到 D
    - `from scripts.utils.delta_store import open_or_create_table, write_records, query, last_update, delta_path, table_exists`
 3. **依赖**：`analytics_api.py` 依赖 `delta_store.py`，两者必须同时拷贝。
 
+## ⚠️ 存储要求：Delta Lake 仅支持 S3
+
+**Delta Lake 强制使用 S3 / 对象存储，不支持本地文件系统。**
+
+- `storage.root` 配置项必须是 `s3://` 开头的 URL（例如 `s3://my-bucket/delta`）
+- 启动时会校验路径格式，本地路径（如 `/data/delta`）将直接报错拒绝
+- `storage_options` 配置项用于传递 S3 凭证（`aws_access_key_id`、`aws_secret_access_key`、`endpoint` 等），走环境变量注入
+- DuckDB 查询时自动加载 `httpfs` + `delta` 扩展并通过 `delta_scan` 读取 S3 上的 Delta 表
+- Skill 实例保持无状态 — 所有数据状态委托给对象存储，实例可随时销毁重建
+
 ## 架构概览
 
 # API 数据分析 Skill 生成模式（nl-to-sql）

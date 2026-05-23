@@ -4,6 +4,8 @@ Generic Delta Lake store — schema-driven write and query.
 Pure data layer: no API knowledge, no HTTP calls.
 Operates on table schemas + Polars DataFrames only.
 Reusable across any scenario that needs Delta Lake I/O.
+
+Delta Lake REQUIRES S3 / object storage — local filesystem paths are rejected.
 """
 from __future__ import annotations
 
@@ -12,6 +14,7 @@ from typing import Any
 
 import duckdb
 import polars as pl
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,8 +22,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class StorageConfig(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
-    root: str = "/data/delta"
+    root: str = ""  # Must be an S3 URL, e.g. s3://my-bucket/delta
     tenant: str = "default"
+    storage_options: dict[str, Any] | None = None
+
+    @field_validator("root")
+    @classmethod
+    def must_be_s3(cls, v: str) -> str:
+        if not v:
+            raise ValueError(
+                "storage.root must be set to an S3 URL (e.g. s3://my-bucket/delta). "
+                "Delta Lake does not support local filesystem storage."
+            )
+        if not v.startswith("s3://"):
+            raise ValueError(
+                f"storage.root must start with 's3://', got: {v!r}. "
+                "Delta Lake requires S3 / object storage — local paths are not supported."
+            )
+        return v
 
 
 # ── Type map (shared short-name → Polars/DuckDB) ────────────────────
@@ -67,22 +86,26 @@ def delta_path(table_cfg: dict, storage_root: str, tenant: str) -> str:
 
 # ── Table lifecycle ─────────────────────────────────────────────────
 
-def table_exists(path: str) -> bool:
-    """Check if a Delta table exists at the given path."""
+def table_exists(path: str, storage_options: dict[str, Any] | None = None) -> bool:
+    """Check if a Delta table exists at the given S3 path."""
     from deltalake import DeltaTable
     from deltalake.exceptions import TableNotFoundError
     try:
-        DeltaTable(path)
+        so = storage_options or {}
+        DeltaTable(path, storage_options=so)
         return True
     except (TableNotFoundError, Exception):
         return False
 
 
-def open_or_create_table(table_cfg: dict, path: str) -> Any:
+def open_or_create_table(
+    table_cfg: dict, path: str, storage_options: dict[str, Any] | None = None,
+) -> Any:
     """Open existing Delta table or create one from schema."""
     from deltalake import DeltaTable, write_deltalake
 
-    if not table_exists(path):
+    so = storage_options or {}
+    if not table_exists(path, so):
         schema_fields = []
         for f in table_cfg["fields"]:
             if f.get("generated"):
@@ -91,14 +114,36 @@ def open_or_create_table(table_cfg: dict, path: str) -> Any:
             series = pl.Series(f["name"], [], dtype=dtype)
             schema_fields.append(series)
         empty_df = pl.DataFrame({s.name: s for s in schema_fields})
-        write_deltalake(path, empty_df, mode="overwrite")
+        write_deltalake(path, empty_df, mode="overwrite", storage_options=so)
 
-    return DeltaTable(path)
+    return DeltaTable(path, storage_options=so)
 
 
-def last_update(table: Any, update_field: str) -> str | None:
-    """Get max(update_field) from an existing Delta table via DuckDB."""
+# ── DuckDB S3 configuration ─────────────────────────────────────────
+
+def _configure_duckdb_s3(con: duckdb.DuckDBPyConnection, storage_options: dict[str, Any]) -> None:
+    """Configure DuckDB to access Delta tables on S3 via httpfs + delta extensions."""
+    con.execute("INSTALL httpfs; LOAD httpfs;")
+    con.execute("INSTALL delta; LOAD delta;")
+    if storage_options.get("aws_access_key_id"):
+        con.execute(f"SET s3_access_key_id = '{storage_options['aws_access_key_id']}'")
+    if storage_options.get("aws_secret_access_key"):
+        con.execute(f"SET s3_secret_access_key = '{storage_options['aws_secret_access_key']}'")
+    if storage_options.get("aws_region"):
+        con.execute(f"SET s3_region = '{storage_options['aws_region']}'")
+    if storage_options.get("endpoint"):
+        con.execute(f"SET s3_endpoint = '{storage_options['endpoint']}'")
+    if storage_options.get("aws_session_token"):
+        con.execute(f"SET s3_session_token = '{storage_options['aws_session_token']}'")
+
+
+def last_update(
+    table: Any, update_field: str, storage_options: dict[str, Any] | None = None,
+) -> str | None:
+    """Get max(update_field) from an existing Delta table via DuckDB + delta_scan."""
+    so = storage_options or {}
     con = duckdb.connect()
+    _configure_duckdb_s3(con, so)
     try:
         rows = con.execute(
             f"SELECT max(\"{update_field}\") FROM delta_scan('{table.table_uri}')"
@@ -116,6 +161,7 @@ def write_records(
     storage_root: str,
     tenant: str = "default",
     generated_values: dict[str, str] | None = None,
+    storage_options: dict[str, Any] | None = None,
 ) -> int:
     """
     Write raw records to a Delta table based on schema.
@@ -123,9 +169,10 @@ def write_records(
     Args:
         table_cfg:      Table definition (name, fields with types + originals).
         records:        List of dicts with API-field keys (matching `original` or `name`).
-        storage_root:   Root path for all delta tables.
+        storage_root:   Root path for all delta tables (S3 URL).
         tenant:         Tenant subdirectory.
         generated_values:  Dict of generated field name → value (e.g. {"org_path": "/a/b"}).
+        storage_options:  S3 credentials passed to deltalake.
 
     Returns:
         Number of records written.
@@ -135,6 +182,7 @@ def write_records(
     if not records:
         return 0
 
+    so = storage_options or {}
     path = delta_path(table_cfg, storage_root, tenant)
 
     # Build rename map (original → name)
@@ -169,7 +217,7 @@ def write_records(
             if f.get("generated") and f["name"] in generated_values:
                 df = df.with_columns(pl.lit(generated_values[f["name"]]).alias(f["name"]))
 
-    write_deltalake(path, df, mode="append")
+    write_deltalake(path, df, mode="append", storage_options=so)
     return len(df)
 
 
@@ -191,8 +239,15 @@ def validate_sql(sql: str) -> None:
         raise ValueError(f"Query contains forbidden keywords: {sql[:80]}")
 
 
-def create_views(con: duckdb.DuckDBPyConnection, tables: list[dict], storage_root: str, tenant: str) -> None:
+def create_views(
+    con: duckdb.DuckDBPyConnection,
+    tables: list[dict],
+    storage_root: str,
+    tenant: str,
+    storage_options: dict[str, Any],
+) -> None:
     """Register each table as a DuckDB VIEW over delta_scan."""
+    _configure_duckdb_s3(con, storage_options)
     for t in tables:
         dp = delta_path(t, storage_root, tenant)
         con.execute(f"CREATE VIEW {t['name']} AS SELECT * FROM delta_scan('{dp}')")
@@ -205,6 +260,7 @@ def query(
     tenant: str = "default",
     org_path: str | None = None,
     default_limit: int = 1000,
+    storage_options: dict[str, Any] | None = None,
 ) -> pl.DataFrame:
     """
     Execute a read-only SQL query against Delta tables via DuckDB.
@@ -212,21 +268,23 @@ def query(
     Args:
         sql:            SELECT statement (table names must match config).
         tables:         Table definitions from config.
-        storage_root:   Root path for delta tables.
+        storage_root:   Root path for delta tables (S3 URL).
         tenant:         Tenant subdirectory.
         org_path:       Optional org prefix for row-level security filter.
         default_limit:  Default LIMIT if not present in SQL.
+        storage_options:  S3 credentials for DuckDB httpfs.
 
     Returns:
         Polars DataFrame with query results.
     """
     validate_sql(sql)
 
+    so = storage_options or {}
     con = duckdb.connect()
     con.execute("SET statement_timeout='30s'")
 
     try:
-        create_views(con, tables, storage_root, tenant)
+        create_views(con, tables, storage_root, tenant, so)
 
         safe_sql = sql.rstrip().rstrip(";")
         if org_path:

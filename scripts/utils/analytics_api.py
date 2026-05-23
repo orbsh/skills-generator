@@ -70,6 +70,7 @@ def sync_table(
     storage_root: str,
     tenant: str = "default",
     generated_values: dict[str, str] | None = None,
+    storage_options: dict[str, Any] | None = None,
     timeout: int = 30,
 ) -> int:
     """
@@ -83,21 +84,23 @@ def sync_table(
     Args:
         table_cfg:       Table definition (api_endpoint, api_method, update_field, fields...).
         base_url:        API base URL.
-        storage_root:    Root path for Delta tables.
+        storage_root:    Root path for Delta tables (S3 URL).
         tenant:          Tenant subdirectory.
         generated_values: Dict of generated field name → value (e.g. {"org_path": "/a/b"}).
+        storage_options:  S3 credentials for deltalake/DuckDB.
         timeout:         HTTP request timeout in seconds.
 
     Returns:
         Number of records written (0 if no new data).
     """
+    so = storage_options or {}
     path = delta_store.delta_path(table_cfg, storage_root, tenant)
-    tbl = delta_store.open_or_create_table(table_cfg, path)
+    tbl = delta_store.open_or_create_table(table_cfg, path, so)
 
     # Determine incremental sync point
     since = None
-    if delta_store.table_exists(path):
-        since = delta_store.last_update(tbl, table_cfg["update_field"])
+    if delta_store.table_exists(path, so):
+        since = delta_store.last_update(tbl, table_cfg["update_field"], so)
 
     # Build API request params
     params = dict(table_cfg.get("api_params", {}))
@@ -120,6 +123,7 @@ def sync_table(
         storage_root=storage_root,
         tenant=tenant,
         generated_values=generated_values,
+        storage_options=so,
     )
 
 
@@ -129,6 +133,7 @@ def sync_all_tables(
     storage_root: str,
     tenant: str = "default",
     generated_values: dict[str, str] | None = None,
+    storage_options: dict[str, Any] | None = None,
     timeout: int = 30,
 ) -> dict[str, int]:
     """
@@ -137,9 +142,10 @@ def sync_all_tables(
     Returns:
         Dict mapping table name → records written.
     """
+    so = storage_options or {}
     results = {}
     for t in tables:
-        count = sync_table(t, base_url, storage_root, tenant, generated_values, timeout)
+        count = sync_table(t, base_url, storage_root, tenant, generated_values, so, timeout)
         results[t["name"]] = count
     return results
 
@@ -162,6 +168,7 @@ def sync_and_query(
     storage_root: str,
     tenant: str = "default",
     context: ContextSettings | None = None,
+    storage_options: dict[str, Any] | None = None,
     timeout: int = 30,
     default_limit: int = 1000,
 ) -> Any:
@@ -172,9 +179,10 @@ def sync_and_query(
         sql:            SELECT statement.
         tables:         Table definitions from config.
         base_url:       API base URL (for sync).
-        storage_root:   Root path for Delta tables.
+        storage_root:   Root path for Delta tables (S3 URL).
         tenant:         Tenant subdirectory.
         context:        Context settings for generated value resolution.
+        storage_options:  S3 credentials for deltalake/DuckDB.
         timeout:        HTTP request timeout.
         default_limit:  Default LIMIT if not present in SQL.
 
@@ -182,6 +190,7 @@ def sync_and_query(
         Polars DataFrame with query results.
     """
     ctx = context or ContextSettings()
+    so = storage_options or {}
     generated = resolve_generated_values(tables, ctx) or None
 
     sync_all_tables(
@@ -190,6 +199,7 @@ def sync_and_query(
         storage_root=storage_root,
         tenant=tenant,
         generated_values=generated,
+        storage_options=so,
         timeout=timeout,
     )
 
@@ -200,4 +210,5 @@ def sync_and_query(
         tenant=tenant,
         org_path=generated.get("org_path") if generated else None,
         default_limit=default_limit,
+        storage_options=so,
     )
