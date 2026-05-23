@@ -1,7 +1,25 @@
 ---
 name: analytics-api-pattern
-description: API 数据分析（nl-to-sql）Skill 生成模式 — 从接口描述 + 示例数据 → 完整可运行的 Analytics Skill
+description: 数据分析（nl-to-sql）Skill 生成模式：API → 同步到 Delta Lake → SQL 查询。注意：分析特指 nl-to-sql，与 nl-to-api 的 search/query 不同。
 ---
+
+# 数据分析 API 模式
+
+本文档描述分析类 Skill 的标准架构：**API 数据同步 → Delta Lake 存储 → SQL 查询**。
+
+## 📦 组件复用指南
+
+**⚠️ 禁止在脚本中重新编写 API 拉取、增量同步、Delta Lake 写入逻辑。**
+
+数据同步和存储模块已作为通用工具内置。在新建 Skill 时，请按以下步骤复用：
+
+1. **拷贝文件**：将 `scripts/utils/analytics_api.py` 和 `scripts/utils/delta_store.py` 完整拷贝至目标 Skill 的 `scripts/utils/` 目录。
+2. **导入使用**：
+   - `from scripts.utils.analytics_api import sync_table, sync_all_tables, sync_and_query, fetch_api`
+   - `from scripts.utils.delta_store import open_or_create_table, write_records, query, last_update, delta_path, table_exists`
+3. **依赖**：`analytics_api.py` 依赖 `delta_store.py`，两者必须同时拷贝。
+
+## 架构概览
 
 # API 数据分析 Skill 生成模式（nl-to-sql）
 

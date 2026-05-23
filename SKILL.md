@@ -21,6 +21,31 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 
 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化专家。你必须严格遵守"复用优先"、"极简逻辑"和"无 Schema 写入"原则。
 
+## 📦 工具函数复用规则
+
+生成新 Skill 时，**必须从 `scripts/utils/` 复制已有工具函数**到目标 Skill 的 `scripts/utils/` 目录下，严禁在脚本中重新发明轮子。
+
+### 可用工具模块清单
+
+| 模块 | 文件 | 复用指南 |
+|------|------|----------|
+| 结构化日志 | `logging.py` | 双格式日志（终端 logfmt / 文件 JSONL），`setup_logging()` 初始化 |
+| 错误处理 | `errors.py` | `ExitCode` 枚举、`raise_exit()`、`ensure_config()`、`handle_httpx_errors()` |
+| HTTP 客户端 | `http.py` | `HTTPClient` / `AsyncHTTPClient`，内置超时 + 自动错误映射（依赖 `errors.py`） |
+| 认证模块 | `auth.py` | `UserAuthClient`、`BackendApiClient`、`get_access_token_from_env()`（依赖 `errors.py`） |
+| 渲染基类 | `renderer.py` | `BaseComponent`，Level-Aware 深度感知 + Markdown/YAML 自动降级 |
+| 业务组件 | `components.py` | `StatusComponent`、`SectionComponent`、`CodeBlockComponent`、`AlertComponent`、`KeyValueComponent`（依赖 `renderer.py`） |
+| 配置管理 | `config.py` | `Settings` 基类 + `ContextSettings`，pydantic-settings + YAML，环境变量优先级 |
+| 数据分析 | `analytics_api.py` | `fetch_api()`、`sync_table()`、`sync_all_tables()`、`sync_and_query()`（依赖 `delta_store.py`） |
+| Delta Lake | `delta_store.py` | `open_or_create_table()`、`write_records()`、`query()`、`last_update()` |
+
+### 复用原则
+
+1. **先查后写**：生成代码前，先检查 `scripts/utils/` 是否已有对应功能。有则复制引用，无才新建。
+2. **按需拷贝**：只复制目标 Skill 实际需要的模块及其依赖。例如使用 `http.py` 必须同时拷贝 `errors.py`。
+3. **统一 import 路径**：所有工具模块统一通过 `from scripts.utils.xxx import ...` 引入，确保相对导入一致性。
+4. **严禁修改副本**：拷贝到 Skill 的工具函数应保持原样。如需扩展，应创建新子类或新模块，而非修改已有实现。
+
 ## 📁 目录结构规范
 
 ```
