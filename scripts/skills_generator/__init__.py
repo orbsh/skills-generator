@@ -23,7 +23,7 @@ try:
     from .iceberg import (
         ensure_oss_s3_compat_env,
         oss_file_io_properties,
-        load_lakekeeper_catalog,
+        load_rest_catalog,
         patch_table_pyarrow_io,
         load_iceberg_table,
     )
@@ -62,7 +62,7 @@ __all__ = [
     # Iceberg / Lakekeeper
     "ensure_oss_s3_compat_env",
     "oss_file_io_properties",
-    "load_lakekeeper_catalog",
+    "load_rest_catalog",
     "patch_table_pyarrow_io",
     "load_iceberg_table",
 ]

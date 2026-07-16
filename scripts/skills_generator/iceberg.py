@@ -44,7 +44,7 @@ def oss_file_io_properties(
     return props
 
 
-def load_lakekeeper_catalog(
+def load_rest_catalog(
     *,
     catalog_uri: str,
     warehouse: str,
