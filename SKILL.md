@@ -44,7 +44,7 @@ from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
 | `StatusComponent` / `SectionComponent` / `CodeBlockComponent` / `AlertComponent` / `KeyValueComponent` | `components.py` | 业务渲染组件 |
 | `Settings` / `build_settings_class` / `load_settings` / `get_skill_root` | `config.py` | pydantic-settings + YAML 配置管理 |
 | `fetch_api` / `sync_table` / `sync_all_tables` / `sync_and_query` | `analytics_api.py` | 数据分析（nl-to-sql） |
-| `open_or_create_table` / `write_records` / `query` / `last_update` | `delta_store.py` | Delta Lake 本地操作 |
+| `open_or_create_table` / `write_records` / `query` / `last_update` | `deltalake.py` | Delta Lake 本地操作 |
 | `load_lakekeeper_catalog` / `load_iceberg_table` / `patch_table_pyarrow_io` | `iceberg.py` | Lakekeeper REST catalog + Iceberg 表操作（需 pyiceberg） |
 
 ### 复用原则

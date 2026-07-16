@@ -14,6 +14,8 @@ dependencies = [
     "structlog",
     "jinja2",
     "pyyaml",
+    "duckdb",
+    "polars",
 ]
 
 [tool.hatch.build.targets.wheel]

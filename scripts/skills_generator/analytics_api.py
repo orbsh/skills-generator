@@ -1,7 +1,7 @@
 """
 API sync and data ingestion.
 
-Fetches data from HTTP APIs, writes to Delta Lake via delta_store.
+Fetches data from HTTP APIs, writes to Delta Lake via deltalake.
 Handles: HTTP calls, incremental since-tracking, response normalization.
 
 Knows nothing about SQL, DuckDB, or query execution.
@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from . import delta_store
+from . import deltalake
 
 
 # ── Shared config (imported by skill run.py) ────────────────────────
@@ -79,7 +79,7 @@ def sync_table(
     1. Opens or creates the Delta table from schema.
     2. Queries MAX(update_field) to determine `since` timestamp.
     3. Fetches API records (with `since` param if applicable).
-    4. Writes records via delta_store.write_records().
+    4. Writes records via deltalake.write_records().
 
     Args:
         table_cfg:       Table definition (api_endpoint, api_method, update_field, fields...).
@@ -94,13 +94,13 @@ def sync_table(
         Number of records written (0 if no new data).
     """
     so = storage_options or {}
-    path = delta_store.delta_path(table_cfg, storage_root, tenant)
-    tbl = delta_store.open_or_create_table(table_cfg, path, so)
+    path = deltalake.delta_path(table_cfg, storage_root, tenant)
+    tbl = deltalake.open_or_create_table(table_cfg, path, so)
 
     # Determine incremental sync point
     since = None
-    if delta_store.table_exists(path, so):
-        since = delta_store.last_update(tbl, table_cfg["update_field"], so)
+    if deltalake.table_exists(path, so):
+        since = deltalake.last_update(tbl, table_cfg["update_field"], so)
 
     # Build API request params
     params = dict(table_cfg.get("api_params", {}))
@@ -117,7 +117,7 @@ def sync_table(
     )
 
     # Write via generic store
-    return delta_store.write_records(
+    return deltalake.write_records(
         table_cfg=table_cfg,
         records=records,
         storage_root=storage_root,
@@ -203,7 +203,7 @@ def sync_and_query(
         timeout=timeout,
     )
 
-    return delta_store.query(
+    return deltalake.query(
         sql=sql,
         tables=tables,
         storage_root=storage_root,
