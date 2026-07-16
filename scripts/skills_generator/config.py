@@ -20,6 +20,7 @@ def get_skill_root(script_path: Path | str | None = None) -> Path:
 
     Args:
         script_path: 当前脚本路径。默认自动检测 (从 utils/config.py 向上推三层至技能根目录)。
+                     作为库使用时，消费方应显式传入自身脚本路径。
 
     Returns:
         Skill 根目录的绝对路径。
@@ -50,6 +51,7 @@ def build_settings_class(
     config_path: Optional[Path] = None,
     extra_context_fields: Optional[dict[str, str]] = None,
     base_class: Type[BaseSettings] = BaseSettings,
+    skill_root: Optional[Path] = None,
 ) -> Type[BaseSettings]:
     """
     动态构建 Settings 类，配合 load_settings() 使用。
@@ -61,12 +63,14 @@ def build_settings_class(
         config_path: config.yaml 路径。默认自动定位 assets/config.yaml。
         extra_context_fields: 额外的 context 字段映射 (字段名 -> 环境变量名)。
         base_class: 基础 Settings 类，用于继承已有字段。
+        skill_root: Skill 根目录。未提供时自动检测。
 
     Returns:
         配置好的 Settings 类。
     """
     if config_path is None:
-        config_path = get_skill_root() / "assets" / "config.yaml"
+        _root = skill_root or get_skill_root()
+        config_path = _root / "assets" / "config.yaml"
 
     # 构建 context 字段注解
     context_annotations: dict[str, Any] = {}
@@ -121,7 +125,10 @@ class Settings(BaseSettings):
     context: DefaultContextSettings = Field(default_factory=DefaultContextSettings)
 
 
-def load_settings(custom_class: Optional[Type[BaseSettings]] = None) -> BaseSettings:
+def load_settings(
+    custom_class: Optional[Type[BaseSettings]] = None,
+    skill_root: Optional[Path] = None,
+) -> BaseSettings:
     """
     加载配置并返回 Settings 实例。
 
@@ -130,6 +137,7 @@ def load_settings(custom_class: Optional[Type[BaseSettings]] = None) -> BaseSett
 
     Args:
         custom_class: 自定义 Settings 类。未提供时使用默认 Settings。
+        skill_root: Skill 根目录。未提供时自动检测。作为库使用时建议显式传入。
 
     Returns:
         配置好的 Settings 实例。
@@ -137,7 +145,8 @@ def load_settings(custom_class: Optional[Type[BaseSettings]] = None) -> BaseSett
     cls = custom_class or Settings
 
     # 手动加载 YAML 配置
-    _config_path = get_skill_root() / "assets" / "config.yaml"
+    _root = skill_root or get_skill_root()
+    _config_path = _root / "assets" / "config.yaml"
     _yaml_data = _load_yaml_config(_config_path)
 
     # 将 YAML 配置传递给 Settings 构造函数

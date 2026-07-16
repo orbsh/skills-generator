@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skills-generator"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "typer",
+    "pydantic",
+    "pydantic-settings",
+    "httpx",
+    "structlog",
+    "jinja2",
+    "pyyaml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["scripts/skills_generator"]

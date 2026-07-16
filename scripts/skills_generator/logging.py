@@ -5,22 +5,25 @@
 所有 Skill 脚本应统一使用此模块初始化日志，禁止直接使用 print() 或标准 logging。
 """
 from pathlib import Path
+from typing import Optional
 import structlog
 import logging
 import sys
 
 
-def setup_logging(log_file: str = ""):
+def setup_logging(log_file: str = "", skill_root: Optional[Path] = None):
     """
     配置 structlog 日志 - 终端 logfmt / 文件 JSONL
 
     Args:
         log_file: 日志文件路径。空字符串输出到终端，指定路径输出到文件。
-                  相对路径将相对于 SKILL 目录解析（代码中 skill_root 向上推 3 级）。
+                  相对路径将相对于 SKILL 目录解析。
                   如需输出到项目 logs 目录，在 config.yaml 中使用 ../../logs/xxx.log
+        skill_root: Skill 根目录。未提供时自动检测（从 utils/logging.py 向上推 3 级）。
+                    作为库使用时建议显式传入消费方的 skill_root。
     """
-    # SKILL 目录 = utils/logging.py 向上 3 级
-    skill_root = Path(__file__).resolve().parent.parent.parent
+    if skill_root is None:
+        skill_root = Path(__file__).resolve().parent.parent.parent
 
     shared_processors = [
         structlog.processors.add_log_level,

@@ -2,7 +2,6 @@
 name: skills-generator
 description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化专家
 ---
-
 ## 📚 参考文档
 
 - `references/auth.md` - 用户认证登录逻辑
@@ -18,49 +17,52 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 - `references/analytics-api-pattern.md` - 数据分析（nl-to-sql）Skill 生成模式：API → 同步到 Delta Lake → SQL 查询。注意：分析特指 nl-to-sql，与 nl-to-api 的 search/query 不同。
 
 # Claude/OpenClaw SKILLs 架构协议
-
 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化专家。你必须严格遵守"复用优先"、"极简逻辑"和"无 Schema 写入"原则。
 
 ## 📦 工具函数复用规则
+生成新 Skill 时，**必须通过 `skills-generator` 库引入已有工具函数**，严禁复制文件或重新发明轮子。
 
-生成新 Skill 时，**必须从 `scripts/utils/` 复制已有工具函数**到目标 Skill 的 `scripts/utils/` 目录下，严禁在脚本中重新发明轮子。
+### 安装
+```bash
+cd /path/to/skills-generator && uv pip install -e .
+```
 
-### 可用工具模块清单
+### 引入方式
+```python
+from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
+```
 
-| 模块 | 文件 | 复用指南 |
-|------|------|----------|
-| 结构化日志 | `logging.py` | 双格式日志（终端 logfmt / 文件 JSONL），`setup_logging()` 初始化 |
-| 错误处理 | `errors.py` | `ExitCode` 枚举、`raise_exit()`、`ensure_config()`、`handle_httpx_errors()` |
-| HTTP 客户端 | `http.py` | `HTTPClient` / `AsyncHTTPClient`，内置超时 + 自动错误映射（依赖 `errors.py`） |
-| 认证模块 | `auth.py` | `UserAuthClient`、`BackendApiClient`、`get_access_token_from_env()`（依赖 `errors.py`） |
-| 渲染基类 | `renderer.py` | `BaseComponent`，Level-Aware 深度感知 + Markdown/YAML 自动降级 |
-| 业务组件 | `components.py` | `StatusComponent`、`SectionComponent`、`CodeBlockComponent`、`AlertComponent`、`KeyValueComponent`（依赖 `renderer.py`） |
-| 配置管理 | `config.py` | `Settings` 基类 + `ContextSettings`，pydantic-settings + YAML，环境变量优先级 |
-| 数据分析 | `analytics_api.py` | `fetch_api()`、`sync_table()`、`sync_all_tables()`、`sync_and_query()`（依赖 `delta_store.py`） |
-| Delta Lake | `delta_store.py` | `open_or_create_table()`、`write_records()`、`query()`、`last_update()` |
+### 可用工具清单
+
+| 名称 | 来源模块 | 复用指南 |
+|------|----------|----------|
+| `setup_logging` / `logger` | `logging.py` | 双格式日志（终端 logfmt / 文件 JSONL） |
+| `ExitCode` / `raise_exit` / `ensure_config` / `handle_httpx_errors` | `errors.py` | 标准错误处理与退出码 |
+| `HTTPClient` / `AsyncHTTPClient` / `create_client` / `create_async_client` | `http.py` | 内置超时 + 自动错误映射 |
+| `UserAuthClient` / `get_access_token_from_env` | `auth.py` | 用户认证 |
+| `BaseComponent` | `renderer.py` | Level-Aware 深度感知 + Markdown/YAML 自动降级 |
+| `StatusComponent` / `SectionComponent` / `CodeBlockComponent` / `AlertComponent` / `KeyValueComponent` | `components.py` | 业务渲染组件 |
+| `Settings` / `build_settings_class` / `load_settings` / `get_skill_root` | `config.py` | pydantic-settings + YAML 配置管理 |
+| `fetch_api` / `sync_table` / `sync_all_tables` / `sync_and_query` | `analytics_api.py` | 数据分析（nl-to-sql） |
+| `open_or_create_table` / `write_records` / `query` / `last_update` | `delta_store.py` | Delta Lake 本地操作 |
 
 ### 复用原则
-
-1. **先查后写**：生成代码前，先检查 `scripts/utils/` 是否已有对应功能。有则复制引用，无才新建。
-2. **按需拷贝**：只复制目标 Skill 实际需要的模块及其依赖。例如使用 `http.py` 必须同时拷贝 `errors.py`。
-3. **统一 import 路径**：所有工具模块统一通过 `from scripts.utils.xxx import ...` 引入，确保相对导入一致性。
-4. **严禁修改副本**：拷贝到 Skill 的工具函数应保持原样。如需扩展，应创建新子类或新模块，而非修改已有实现。
+1. **引入优先**：生成代码前，先确认 `skills_generator` 已有对应功能。有则引入，无才新建。
+2. **skill_root 参数**：`load_settings()` 和 `setup_logging()` 建议显式传入消费方的 `skill_root`（即 `Path(__file__).resolve().parent.parent`），确保配置和日志路径正确解析。
 
 ## 📁 目录结构规范
-
 ```
 <skill_name>/
 ├── SKILL.md           # [必须] 入口文件
 ├── scripts/
-│   ├── run.py         # [可选] Typer 命令行脚本
-│   └── utils/         # [可选] 工具模块（如 renderer.py 复用 BaseComponent）
+│   └── run.py         # [可选] Typer 命令行脚本
 ├── assets/
 │   └── config.yaml    # [必须] Skill 配置文件
 └── references/        # [可选] 扩展文档
 ```
+注意：不再需要在每个 Skill 中复制 `scripts/utils/` 目录。
 
 ## 🚨 核心准则
-
 | 准则 | 说明 | 详见 |
 |------|------|------|
 | 接口复用优先 | 有现成接口则严禁生成新脚本 | - |
@@ -70,7 +72,7 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 | 配置优先级 | `Settings` 必须实现 `settings_customise_sources`，确保环境变量 > YAML > .env > 初始化参数 | `references/context-env.md` |
 | 禁止硬编码 URL | 所有外部接口地址必须写入 `config.yaml`，禁止代码中硬编码 | `references/context-env.md` |
 | 结构化日志 | 使用 structlog，终端 logfmt / 文件 JSONL | `references/structlog.md` |
-| 日志路径约束 | `logfile` 相对路径相对于 SKILL 父级目录（`scripts/utils/logging.py` 向上推 4 级）解析 | `references/structlog.md` |
+| 日志路径约束 | `logfile` 相对路径相对于 skill_root 解析，消费方传入显式 skill_root | `references/structlog.md` |
 | 结构化输出优先 | 复杂树状数据或层级报告输出必须使用 `BaseComponent`，启用深度降级机制 | `references/pydantic-renderer.md` |
 | 模板优先 | 当 `BaseComponent` 无法满足复杂排版需求时，方可使用 Jinja2 模板，禁止编写专用格式化函数 | `references/skill-structure.md` / `#jinja2-模板约束` |
 | 标准 Exit Code | 通过返回码告知 Agent 错误类型 | `references/error-handling.md` |
@@ -103,23 +105,20 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 ### 3. assets/config.yaml（配置文件）
 - 声明所有配置项默认值
 - 包含 `logfile` 字段（空字符串输出到终端，指定路径输出到文件）
-- `logfile` 相对路径相对于 SKILL 父级目录解析（`logging.py` 中 `project_root` 向上推 4 级），如需输出到项目 logs 目录，使用 `../../logs/xxx.log`
+- `logfile` 相对路径相对于 skill_root 解析，如需输出到项目 logs 目录，使用 `../../logs/xxx.log`
 - 包含 `context` 字段映射 Agent 上下文环境变量
 - 详见 `references/context-env.md`
 
 ## 🧩 Pydantic BaseComponent 约束
-
 当输出内容为树状结构、多层级报告或嵌套详情时，必须使用 `BaseComponent` 替代纯字符串拼接或 Jinja2 模板。详见 `references/pydantic-renderer.md`。
 - 所有层级渲染必须通过 `render(depth=1, max_md_depth=3)` 实现自动降级。
 - 超过 `max_md_depth` 的内容将自动转为 ` ```yaml ` 代码块，确保 AI 可读。
 - 组件树必须先通过 `_to_dict_recursive()` 转为字典后，方可传入 Jinja2 模板（如需混合渲染）。
 
 ## 🎨 Jinja2 模板约束
-
 编写模板时请遵循精确空白控制模式：所有控制块（`for`/`if`/`set`）需加 `-` 修整符（如 `{%-` / `-%}`），确保输出文本无多余空行，且严禁使用 `fromjson` 等非原生过滤器。完整规则与示例参阅 `references/jinja2-templates.md`。
 
 ## 🚫 绝对禁令
-
 - 禁止生成 Quickstart、README 或安装教学
 - 禁止使用 Python 字符串拼接或专用函数格式化输出（必须使用 Jinja2 模板）
 - 禁止读取 `.env` 或处理系统路径
