@@ -18,6 +18,18 @@ from .http import (
 from .auth import UserAuthClient, get_access_token_from_env
 from .config import get_skill_root, build_settings_class, Settings, load_settings
 
+# Iceberg — optional dependency (pyiceberg)
+try:
+    from .iceberg import (
+        ensure_oss_s3_compat_env,
+        oss_file_io_properties,
+        load_lakekeeper_catalog,
+        patch_table_pyarrow_io,
+        load_iceberg_table,
+    )
+except ImportError:
+    pass
+
 __all__ = [
     # Renderer & Components
     "BaseComponent",
@@ -47,4 +59,10 @@ __all__ = [
     "build_settings_class",
     "Settings",
     "load_settings",
+    # Iceberg / Lakekeeper
+    "ensure_oss_s3_compat_env",
+    "oss_file_io_properties",
+    "load_lakekeeper_catalog",
+    "patch_table_pyarrow_io",
+    "load_iceberg_table",
 ]
