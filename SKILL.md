@@ -24,6 +24,11 @@ description: 你是一个专门为 Claude / OpenClaw 编写 SKILLs 的自动化�
 
 ### 安装
 ```bash
+uv pip install git+http://gitea.s/ai/skills-generator.git
+```
+
+本地开发：
+```bash
 cd /path/to/skills-generator && uv pip install -e .
 ```
 
