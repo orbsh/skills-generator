@@ -7,16 +7,6 @@ description: Agent 上下文环境变量映射规范，说明技能如何正确�
 
 本文档说明技能如何正确读取 Agent 传递的上下文信息（如用户 ID、认证 Token 等）。
 
-## 📦 组件复用指南
-
-**⚠️ 禁止在脚本中重复编写 `Settings` 类定义和 `settings_customise_sources` 逻辑。**
-
-配置加载逻辑已作为通用工具内置。在新建 Skill 时，请按以下步骤复用：
-
-1. **拷贝文件**：将 `scripts/utils/config.py` 完整拷贝至目标 Skill 的 `scripts/utils/` 目录下（或参考其模板创建独立的 `config.py`）。
-2. **导入使用**：在 `run.py` 中通过 `from scripts.utils.config import Settings, ContextSettings` 引入，或按本文档模板创建本地 `config.py`。
-3. **按需扩展**：在拷贝的 `config.py` 基础上添加业务所需的嵌套 `BaseSettings` 模型（如 `SurrealDbSettings`、`OrderApiSettings`）。
-
 ## ⚙️ 配置加载实现
 
 **✅ 推荐加载配置文件生成一个单独的 `config.py` 模块，放置在与 `run.py` 同级目录。这样可以实现配置与业务逻辑解耦，支持配置文件的独立修改。**
