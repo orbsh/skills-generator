@@ -54,36 +54,30 @@ Prompt: "当前用户是 101，帮他查询订单。"
 
 ### A. 流量捕获（服务端认证模块）
 
-当请求到达后端时，通过 `extract_token()` 按 `settings.auth.auth_method` 列表顺序提取受信任的 Token：
+当请求到达后端时，通过 `extract_tokens()` 按 `settings.auth.extractors` 列表全量提取 Token：
 
 ```python
-# sovereign/src/sovereign/auth_context.py
-def extract_token(
-    headers: Dict[str, str],
-    cookies: Dict[str, str],
-    query_params: Optional[Dict[str, str]] = None,
-) -> Optional[str]:
-    """从请求头、Cookie 或 URL 查询参数中提取 Token。
-    按 auth_method 列表中指定的顺序尝试提取。
-    """
-    for method in settings.auth.auth_method:
-        if method == "header":
-            target_header = settings.auth.header_name.lower()
-            for k, v in headers.items():
-                if k.lower() == target_header:
-                    return v.strip()
-        elif method == "cookie":
-            target_cookie = settings.auth.cookie_name.lower()
-            for k, v in cookies.items():
-                if k.lower() == target_cookie:
-                    return v.strip()
-        elif method == "query":
-            if query_params:
-                param_name = getattr(settings.auth, 'params_name', None) or settings.auth.ws_query_param
-                token = query_params.get(param_name)
-                if token:
-                    return token.strip()
-    return None
+# skillforge/src/skillforge/server/auth.py
+def extract_tokens(
+    headers: dict[str, str],
+    cookies: dict[str, str],
+    query_params: dict[str, str] | None = None,
+) -> tuple[str | None, list[tuple[str, str]], TokenExtractor | None]:
+    """全量提取 Token。所有 extractors 都执行，成功的按 env_key 注入。"""
+    injections: list[tuple[str, str]] = []
+    primary: str | None = None
+    primary_extractor: TokenExtractor | None = None
+
+    for ext in settings.auth.extractors:
+        token = _try_extract(ext, headers, cookies, query_params)
+        if token:
+            if ext.env_key:
+                injections.append((ext.env_key, token))
+            if primary is None:
+                primary = token
+                primary_extractor = ext
+
+    return primary, injections, primary_extractor
 ```
 
 **关键特性**：
@@ -193,10 +187,10 @@ class Settings(BaseSettings):
 
 ```python
 import os
+import json
 import typer
 
 from scripts.utils.config import Settings, load_settings
-from scripts.utils.auth import UserAuthClient, get_access_token_from_env
 from scripts.utils.logging import setup_logging, logger
 from scripts.utils.errors import raise_exit, ExitCode
 
@@ -214,17 +208,12 @@ def main(query: str):
         # 缺失身份视为业务错误（权限不足）
         raise_exit(ExitCode.BUSINESS_ERROR, "缺失用户身份，未通过带外注入")
 
-    # ✅ 获取带外注入的 Token
-    access_token = get_access_token_from_env(cfg.context)
+    # ✅ 用户身份已由 skillforge 服务端解析，直接读取环境变量
+    user_name = os.environ.get("CONTEXT_METADATA_USER_NAME")
+    user_info = json.loads(os.environ.get("CONTEXT_METADATA_USER_INFO", "{}"))
 
     # ✅ 业务调用（身份来自系统注入，非 LLM Prompt）
-    client = UserAuthClient(
-        api_url=cfg.user_api.url,
-        cookie_name=cfg.user_api.cookie_name,
-        header_name=cfg.user_api.header_name,
-    )
-    # 实际 API 请求会使用 access_token 进行认证
-    orders = query_orders(user_id=user_id, query=query, token=access_token)
+    orders = query_orders(user_id=user_id, query=query)
 
     logger.info("orders-fetched", user_id=user_id, count=len(orders))
 ```
@@ -254,7 +243,7 @@ user_id = extract_from_llm_messages(messages)
 
 | 模块 | 集成说明 |
 |------|----------|
-| `references/auth.md` | 带外注入使用 `UserAuthClient` 验证身份，但 Token 来源是 `CONTEXT_METADATA_ACCESS_TOKEN` 环境变量而非 Prompt |
+| `references/auth.md` | skill 侧使用 `BackendApiClient` 调用后端 API，用户身份由 skillforge 服务端解析后通过环境变量注入 |
 | `references/context-env.md` | `CONTEXT_USER_ID`、`CONTEXT_METADATA_*` 等变量名已在 `DefaultContextSettings` 中完成默认映射 |
 | `references/error-handling.md` | 缺失带外身份时应调用 `raise_exit(ExitCode.BUSINESS_ERROR, "缺失带外身份")`（Code 3） |
 | `references/structlog.md` | 使用 `scripts.utils.logging` 记录身份使用事件，如 `logger.info("oob-identity-used", user_id=user_id)` |
