@@ -249,7 +249,6 @@ if __name__ == "__main__":
 │       ├── logging.py        # [必选] structlog 初始化
 │       ├── errors.py         # [必选] ExitCode 与错误处理
 │       ├── http.py           # [推荐] HTTPClient 封装
-│       └── auth.py           # [可选] 用户认证
 └── assets/
     ├── config.yaml
     └── templates/

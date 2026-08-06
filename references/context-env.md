@@ -121,13 +121,13 @@ token = os.environ.get(cfg.context.token)
 
 ## 认证 Token 获取示例
 
-通过工具模块封装，获取 Token 变得极简：
+用户身份与 Token 已由 skillforge 服务端解析并注入环境变量，skill 直接读取即可：
 
 ```python
-from scripts.utils.auth import get_access_token_from_env
+import os
 
-# 从统一 Token 环境变量读取
-token = get_access_token_from_env(cfg.context)
+# 从统一 Token 环境变量读取（映射自 config.yaml 的 context.token）
+token = os.environ.get(cfg.context.token)
 if not token:
     raise ValueError("未找到认证 Token")
 ```

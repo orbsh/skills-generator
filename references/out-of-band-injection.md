@@ -243,7 +243,7 @@ user_id = extract_from_llm_messages(messages)
 
 | 模块 | 集成说明 |
 |------|----------|
-| `references/auth.md` | skill 侧使用 `BackendApiClient` 调用后端 API，用户身份由 skillforge 服务端解析后通过环境变量注入 |
+| `references/auth.md` | 用户身份与 Token 由 skillforge 服务端解析后注入环境变量，skill 直接读取 |
 | `references/context-env.md` | `CONTEXT_USER_ID`、`CONTEXT_METADATA_*` 等变量名已在 `DefaultContextSettings` 中完成默认映射 |
 | `references/error-handling.md` | 缺失带外身份时应调用 `raise_exit(ExitCode.BUSINESS_ERROR, "缺失带外身份")`（Code 3） |
 | `references/structlog.md` | 使用 `skillforge.logging` 记录身份使用事件，如 `logger.info("oob-identity-used", user_id=user_id)` |
@@ -254,7 +254,7 @@ user_id = extract_from_llm_messages(messages)
 
 1. **永远不要**将 `user_id`、`token`、`role` 等敏感信息拼接到 System Prompt 或 User Message 中
 2. SKILL 入口处必须**校验**环境变量是否存在：`if not os.environ.get(cfg.context.user_id): raise_exit(...)`
-3. Token 获取统一使用 `get_access_token_from_env(cfg.context)`，遵循 `DefaultContextSettings` 映射规范
+3. Token 获取统一从 `cfg.context.token` 映射的环境变量读取，遵循 `DefaultContextSettings` 映射规范
 4. `ContextVar` 必须配合中间件正确使用 `set()` 和 `reset()`（sovereign 已内置 `_context_aware_subprocess_run` 自动处理）
 5. 所有 SKILL 日志必须记录 `user_id` 来源标识（如 `"source": "out-of-band"`），便于安全审计
 

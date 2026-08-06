@@ -15,7 +15,6 @@ from .http import (
     create_client,
     create_async_client,
 )
-from .auth import get_access_token_from_env
 from .config import get_skill_root, build_settings_class, Settings, load_settings
 
 # Iceberg — optional dependency (pyiceberg)
@@ -51,8 +50,6 @@ __all__ = [
     "AsyncHTTPClient",
     "create_client",
     "create_async_client",
-    # Auth
-    "get_access_token_from_env",
     # Config
     "get_skill_root",
     "build_settings_class",

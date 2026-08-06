@@ -44,7 +44,6 @@ from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
 | `setup_logging` / `logger` | `skillforge.logging`（经 `skills_generator` 转出） | 双格式日志（终端 logfmt / 文件 JSONL，按天旋转） |
 | `ExitCode` / `raise_exit` / `ensure_config` / `handle_httpx_errors` | `errors.py` | 标准错误处理与退出码 |
 | `HTTPClient` / `AsyncHTTPClient` / `create_client` / `create_async_client` | `http.py` | 内置超时 + 自动错误映射 |
-| `get_access_token_from_env` | `auth.py` | 环境变量 Token 读取 |
 | `BaseComponent` | `renderer.py` | Level-Aware 深度感知 + Markdown/YAML 自动降级 |
 | `StatusComponent` / `SectionComponent` / `CodeBlockComponent` / `AlertComponent` / `KeyValueComponent` | `components.py` | 业务渲染组件 |
 | `Settings` / `build_settings_class` / `load_settings` / `get_skill_root` | `config.py` | pydantic-settings + YAML 配置管理 |
