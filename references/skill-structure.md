@@ -117,6 +117,7 @@ from typing import Optional
 # 导入通用工具模块
 from scripts.utils import (
     setup_logging,
+    get_skill_root,
     # Settings 类直接定义在 run.py 中（详见 references/context-env.md）
     ExitCode,
     raise_exit,
@@ -132,7 +133,8 @@ from scripts.utils import (
 cfg = Settings()
 
 # 2. 初始化日志 (详见 references/structlog.md)
-setup_logging(cfg.logfile)
+skill_root = get_skill_root()
+setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)
 
 # 3. 初始化 Typer App
 app = typer.Typer(
@@ -145,7 +147,7 @@ app = typer.Typer(
 @app.callback(invoke_without_command=False)
 def main(ctx: typer.Context):
     """CLI - 必须使用子命令调用"""
-    setup_logging(cfg.logfile)
+    setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)
     session_id = os.environ.get(cfg.context.session_id) or shortuuid.uuid()
     user_id = os.environ.get(cfg.context.user_id) or f"anon-{shortuuid.uuid()[:8]}"
 
@@ -237,7 +239,7 @@ if __name__ == "__main__":
 │   ├── run.py
 │   │   ├── imports (typer, scripts.utils.*)
 │   │   ├── cfg = Settings()
-│   │   ├── setup_logging(cfg.logfile)
+│   │   ├── setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)
 │   │   ├── app = typer.Typer(...)
 │   │   ├── @app.command() implementations (使用 HTTPClient / raise_exit)
 │   │   └── if __name__ == "__main__": app()

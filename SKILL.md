@@ -41,7 +41,7 @@ from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
 
 | 名称 | 来源模块 | 复用指南 |
 |------|----------|----------|
-| `setup_logging` / `logger` | `logging.py` | 双格式日志（终端 logfmt / 文件 JSONL） |
+| `setup_logging` / `logger` | `skillforge.logging`（经 `skills_generator` 转出） | 双格式日志（终端 logfmt / 文件 JSONL，按天旋转） |
 | `ExitCode` / `raise_exit` / `ensure_config` / `handle_httpx_errors` | `errors.py` | 标准错误处理与退出码 |
 | `HTTPClient` / `AsyncHTTPClient` / `create_client` / `create_async_client` | `http.py` | 内置超时 + 自动错误映射 |
 | `get_access_token_from_env` | `auth.py` | 环境变量 Token 读取 |
@@ -78,7 +78,7 @@ from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
 | 配置优先级 | `Settings` 必须实现 `settings_customise_sources`，确保环境变量 > YAML > .env > 初始化参数 | `references/context-env.md` |
 | 禁止硬编码 URL | 所有外部接口地址必须写入 `config.yaml`，禁止代码中硬编码 | `references/context-env.md` |
 | 结构化日志 | 使用 structlog，终端 logfmt / 文件 JSONL | `references/structlog.md` |
-| 日志路径约束 | `logfile` 相对路径相对于 skill_root 解析，消费方传入显式 skill_root | `references/structlog.md` |
+| 日志路径约束 | `log_dir` 相对路径相对于 skill_root 解析（输出目标二选一：空=终端，指定目录=文件按天旋转），消费方传入显式 skill_root | `references/structlog.md` |
 | 结构化输出优先 | 复杂树状数据或层级报告输出必须使用 `BaseComponent`，启用深度降级机制 | `references/pydantic-renderer.md` |
 | 模板优先 | 当 `BaseComponent` 无法满足复杂排版需求时，方可使用 Jinja2 模板，禁止编写专用格式化函数 | `references/skill-structure.md` / `#jinja2-模板约束` |
 | 标准 Exit Code | 通过返回码告知 Agent 错误类型 | `references/error-handling.md` |
@@ -110,8 +110,8 @@ from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
 
 ### 3. assets/config.yaml（配置文件）
 - 声明所有配置项默认值
-- 包含 `logfile` 字段（空字符串输出到终端，指定路径输出到文件）
-- `logfile` 相对路径相对于 skill_root 解析，如需输出到项目 logs 目录，使用 `../../logs/xxx.log`
+- 包含 `log_dir` 字段（空字符串输出到终端，指定目录输出到文件，按天旋转）
+- `log_dir` 相对路径相对于 skill_root 解析，如需输出到项目 logs 目录，使用 `../../logs`
 - 包含 `context` 字段映射 Agent 上下文环境变量
 - 详见 `references/context-env.md`
 
@@ -131,6 +131,6 @@ from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
 - 禁止硬编码外部接口 URL（必须写入 `config.yaml`）
 - 禁止动态表名（表名必须是字面量）
 - 禁止在 Skill 目录下创建 `.txt`、`.db`、`.json` 等持久化文件
-- 禁止在 Skill 目录下创建日志文件（日志必须输出到 SKILL 父级目录之外的路径，如 `../../logs/`）
+- 禁止在 Skill 目录下创建日志文件（日志目录必须输出到 SKILL 父级目录之外的路径，如 `../../logs`）
 - 禁止裸奔网络调用（必须设置 `timeout`）
 - 禁止使用 `print()` 输出日志（必须使用 `structlog`）

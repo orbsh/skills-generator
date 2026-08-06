@@ -11,13 +11,12 @@ description: structlog 日志库使用规范，包含双格式输出（JSONL/log
 
 **⚠️ 禁止在脚本中重复编写 `setup_logging()` 函数。**
 
-该日志初始化逻辑已作为通用工具内置。在新建 Skill 时，请按以下步骤复用：
+日志初始化逻辑已统一下沉至 **skillforge** 包，作为独立子模块 `skillforge.logging` 提供。在新建 Skill 时，请按以下步骤复用：
 
-1. **拷贝文件**：将 `scripts/utils/logging.py` 完整拷贝至目标 Skill 的 `scripts/utils/` 目录下。
-2. **导入使用**：在 `run.py` 中通过 `from scripts.utils.logging import setup_logging, logger` 引入。
-3. **调用初始化**：在加载配置后执行 `setup_logging(cfg.logfile)`。
+1. **导入使用**：在 `run.py` 中通过 `from skillforge.logging import setup_logging, logger` 引入（`skills_generator` 的 `setup_logging` / `logger` 即由此转出）。
+2. **调用初始化**：在加载配置后执行 `setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)`。
 
-如需查看完整源码实现，请参阅项目内的 `scripts/utils/logging.py` 文件。
+如需查看完整源码实现，请参阅 skillforge 项目内的 `src/skillforge/logging.py`。
 
 ## 核心原则
 
@@ -27,22 +26,26 @@ description: structlog 日志库使用规范，包含双格式输出（JSONL/log
 
 ## 配置项
 
-在 `assets/config.yaml` 中添加 `logfile` 字段：
+在 `assets/config.yaml` 中添加 `log_dir` 字段（输出目标二选一）：
 
 ```yaml
-# 空字符串 = 输出到终端（logfmt），指定路径 = 输出到文件（JSONL）
-# ⚠️ 相对路径相对于 SKILL 父级目录解析（logging.py 向上推 4 级）
-#   如需输出到项目 logs 目录，使用 ../../logs/xxx.log
-logfile: ""
+# 空字符串/缺省 = 输出到终端（logfmt）
+# 指定目录       = 输出到文件（JSONL，按天旋转，默认保留 30 份，旧的自动删除）
+# ⚠️ 相对路径相对于 skill_root 解析，消费方传入显式 skill_root
+#   如需输出到项目 logs 目录，使用 ../../logs
+log_dir: ""
+backup_count: 30
 ```
 
 ## 使用示例
 
 ```python
-from scripts.utils.logging import setup_logging, logger
+from skillforge.logging import setup_logging, logger
+from skills_generator.config import get_skill_root
 
-# 配置加载后初始化日志
-setup_logging(cfg.logfile)
+# 配置加载后初始化日志（显式传入消费方 skill_root，确保相对路径正确解析）
+skill_root = get_skill_root()
+setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)
 
 # ✅ 正确：结构化键值对 + 英文缩写事件名
 logger.info("req-start", endpoint="/api/data", user_id=user_id)

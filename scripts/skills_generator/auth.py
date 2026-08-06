@@ -6,11 +6,10 @@
 """
 from typing import Optional, Dict, Any
 import os
-import structlog
 import httpx
 
 from .errors import ExitCode, raise_exit, handle_httpx_errors
-from .logging import logger
+from skillforge.logging import logger
 
 
 class BackendApiClient:

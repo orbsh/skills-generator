@@ -190,8 +190,8 @@ import os
 import json
 import typer
 
-from scripts.utils.config import Settings, load_settings
-from scripts.utils.logging import setup_logging, logger
+from scripts.utils.config import Settings, load_settings, get_skill_root
+from skillforge.logging import setup_logging, logger
 from scripts.utils.errors import raise_exit, ExitCode
 
 app = typer.Typer()
@@ -199,8 +199,8 @@ app = typer.Typer()
 @app.command()
 def main(query: str):
     """查询订单（自动使用带外注入的身份）"""
-    setup_logging()
     cfg: Settings = load_settings()
+    setup_logging(log_dir=cfg.log_dir, skill_root=get_skill_root())
 
     # ✅ 正确：通过 settings.context 映射读取带外注入的环境变量
     user_id = os.environ.get(cfg.context.user_id)
@@ -246,7 +246,7 @@ user_id = extract_from_llm_messages(messages)
 | `references/auth.md` | skill 侧使用 `BackendApiClient` 调用后端 API，用户身份由 skillforge 服务端解析后通过环境变量注入 |
 | `references/context-env.md` | `CONTEXT_USER_ID`、`CONTEXT_METADATA_*` 等变量名已在 `DefaultContextSettings` 中完成默认映射 |
 | `references/error-handling.md` | 缺失带外身份时应调用 `raise_exit(ExitCode.BUSINESS_ERROR, "缺失带外身份")`（Code 3） |
-| `references/structlog.md` | 使用 `scripts.utils.logging` 记录身份使用事件，如 `logger.info("oob-identity-used", user_id=user_id)` |
+| `references/structlog.md` | 使用 `skillforge.logging` 记录身份使用事件，如 `logger.info("oob-identity-used", user_id=user_id)` |
 
 ---
 

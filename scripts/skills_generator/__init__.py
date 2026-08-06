@@ -6,7 +6,7 @@ from .components import (
     AlertComponent,
     KeyValueComponent,
 )
-from .logging import setup_logging, logger
+from skillforge.logging import setup_logging, logger
 from .errors import ExitCode, raise_exit, ensure_config, handle_httpx_errors
 
 from .http import (
