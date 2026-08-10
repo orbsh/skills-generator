@@ -44,7 +44,8 @@ import structlog
 from skillforge.logging import init_logging, setup_logging
 
 # 免配置初始化日志（读取框架默认），优先推荐
-init_logging()
+# 可在 init 时绑定实例级上下文（skill_name 等），后续所有日志自动携带
+init_logging(skill_name="orders-fetch")
 
 # 或：# 自定义输出目标时，相对路径按当前工作目录解析
 # setup_logging(log_dir=cfg.log_dir)
@@ -61,6 +62,21 @@ logger.error("db-conn-fail", host="db.example.com", port=5432)
 logger.info(f"开始处理请求: {endpoint}, user: {user_id}")
 logger.info("开始处理请求", endpoint="/api/data")
 ```
+
+## 初始化时绑定实例级上下文
+
+`init_logging()` 接受任意 `**context`，通过 structlog 的 contextvars 绑定到当前上下文，**该上下文内所有 logger 的所有日志**都会自动携带这些字段，无需逐条传入：
+
+```python
+from skillforge.logging import init_logging
+
+init_logging(skill_name="orders-fetch", skill_id="SK-1")
+# 之后任意模块的日志都自动带 skill_name / skill_id
+```
+
+- 适用于「整个技能/请求共享的标识」，如 `skill_name`、`skill_id`、`env`。
+- 基于 `merge_contextvars`（框架已配置），对线程（含 `to_thread`）与 async 上下文生效。
+- 只在**当前上下文**内生效，不会污染其他并发执行。
 
 ## 上下文绑定（logger 实例）
 
