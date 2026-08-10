@@ -64,7 +64,29 @@ logger.info(f"开始处理请求: {endpoint}, user: {user_id}")
 logger.info("开始处理请求", endpoint="/api/data")
 ```
 
+## 上下文绑定（logger 实例）
+
+不要把 `user_id` / `session_id` 等请求级上下文重复传给每条日志。用 `logger.bind(...)` 绑定一次，返回的新 logger 自动携带这些字段，后续日志无需重复传入：
+
+```python
+logger = structlog.get_logger(__name__)
+
+# 请求开始时绑定上下文，后续所有日志自动带上 user_id / session_id
+log = logger.bind(user_id=user_id, session_id=session_id)
+log.info("op-start", endpoint="/api/data")
+log.error("op-fail", err=str(e))   # 自动包含 user_id / session_id
+
+# ✅ 若需临时移除/覆盖，可再次 bind 覆盖，或用 log.unbind("user_id")
+```
+
+要点：
+
+- `bind()` **不修改模块级共享 logger**，而是返回新的绑定实例，因此并发调用（如 `to_thread` 并行执行）互不干扰。
+- 只适用于**同一作用域内需要共享上下文**的场景（如一次脚本执行、一次请求处理）。
+- 若需让**整个请求链路的所有模块**都带上上下文（跨函数/跨模块），则用 `structlog.contextvars.bind_contextvars(...)`（配合框架已配置的 `merge_contextvars`），并在结束时 `clear_contextvars()` 清理。
+
 ## 日志级别
+
 
 | 级别 | 使用场景 |
 |------|----------|
@@ -76,6 +98,6 @@ logger.info("开始处理请求", endpoint="/api/data")
 ## 最佳实践
 
 1. **事件名使用英文缩写**：使用 `-` 分隔，无空格，尽量短且便于分类，支持缩写（如 `app-start`, `auth-miss`, `ord-query`, `err-conn`）
-2. **关键上下文必传**：`user_id`、`request_id`、`endpoint` 等
+2. **关键上下文必传**：`user_id`、`request_id`、`endpoint` 等；同一作用域复用同一上下文时用 `logger.bind()` 绑定一次，避免重复传入（见「上下文绑定」）
 3. **异常信息使用 `str(e)`**：避免直接传入异常对象
 4. **不要在日志中包含敏感信息**：如密码、Token、Cookie
