@@ -191,7 +191,7 @@ import json
 import typer
 
 from scripts.utils.config import Settings, load_settings, get_skill_root
-from skillforge.logging import setup_logging, logger
+from skillforge.logging import setup_logging
 from scripts.utils.errors import raise_exit, ExitCode
 
 app = typer.Typer()
@@ -200,7 +200,7 @@ app = typer.Typer()
 def main(query: str):
     """查询订单（自动使用带外注入的身份）"""
     cfg: Settings = load_settings()
-    setup_logging(log_dir=cfg.log_dir, skill_root=get_skill_root())
+    setup_logging(log_dir=cfg.log_dir)
 
     # ✅ 正确：通过 settings.context 映射读取带外注入的环境变量
     user_id = os.environ.get(cfg.context.user_id)
