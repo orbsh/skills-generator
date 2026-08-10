@@ -16,9 +16,10 @@ dependencies = [
     "pyyaml",
     "duckdb",
     "polars",
-    # 日志子模块下沉至 skillforge（logging.py），此处为本地路径依赖
-    "skillforge @ file:///home/master/world/skillforge",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["scripts/skills_generator"]
