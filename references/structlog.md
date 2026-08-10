@@ -13,8 +13,8 @@ description: structlog 日志库使用规范，包含双格式输出（JSONL/log
 
 日志初始化逻辑已统一下沉至 **skillforge** 包，作为独立子模块 `skillforge.logging` 提供。在新建 Skill 时，请按以下步骤复用：
 
-1. **导入使用**：在 `run.py` 中通过 `from skillforge.logging import setup_logging, logger` 引入（`skills_generator` 的 `setup_logging` / `logger` 即由此转出）。
-2. **调用初始化**：在加载配置后执行 `setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)`。
+1. **导入使用**：在 `run.py` 中通过 `from skillforge.logging import init_logging, setup_logging` 引入（`skills_generator` 的 `init_logging` / `setup_logging` 即由此转出）。
+2. **调用初始化**：通常直接执行免配置的 `init_logging()`（读取框架 `settings.logging` 默认值，复用主进程日志行为）；如需自定义输出目标，再改用 `setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)`。
 
 如需查看完整源码实现，请参阅 skillforge 项目内的 `src/skillforge/logging.py`。
 
@@ -40,12 +40,19 @@ backup_count: 30
 ## 使用示例
 
 ```python
-from skillforge.logging import setup_logging, logger
+import structlog
+from skillforge.logging import init_logging, setup_logging
 from skills_generator.config import get_skill_root
 
-# 配置加载后初始化日志（显式传入消费方 skill_root，确保相对路径正确解析）
-skill_root = get_skill_root()
-setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)
+# 免配置初始化日志（读取框架默认），优先推荐
+init_logging()
+
+# 或：# 自定义输出目标时，显式传入消费方 skill_root，确保相对路径正确解析
+# skill_root = get_skill_root()
+# setup_logging(log_dir=cfg.log_dir, skill_root=skill_root)
+
+# 各模块使用自己的 logger（不带共享实例）
+logger = structlog.get_logger(__name__)
 
 # ✅ 正确：结构化键值对 + 英文缩写事件名
 logger.info("req-start", endpoint="/api/data", user_id=user_id)

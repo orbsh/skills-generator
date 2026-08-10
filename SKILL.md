@@ -34,14 +34,14 @@ cd /path/to/skills-generator && uv pip install -e .
 
 ### 引入方式
 ```python
-from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
+from skills_generator import HTTPClient, setup_logging, init_logging, load_settings, ExitCode
 ```
 
 ### 可用工具清单
 
 | 名称 | 来源模块 | 复用指南 |
 |------|----------|----------|
-| `setup_logging` / `logger` | `skillforge.logging`（经 `skills_generator` 转出） | 双格式日志（终端 logfmt / 文件 JSONL，按天旋转） |
+| `setup_logging` / `init_logging` | `skillforge.logging`（经 `skills_generator` 转出） | 双格式日志（终端 logfmt / 文件 JSONL，按天旋转）；`init_logging()` 免配置复用框架默认 |
 | `ExitCode` / `raise_exit` / `ensure_config` / `handle_httpx_errors` | `errors.py` | 标准错误处理与退出码 |
 | `HTTPClient` / `AsyncHTTPClient` / `create_client` / `create_async_client` | `http.py` | 内置超时 + 自动错误映射 |
 | `BaseComponent` | `renderer.py` | Level-Aware 深度感知 + Markdown/YAML 自动降级 |
@@ -53,7 +53,7 @@ from skills_generator import HTTPClient, setup_logging, load_settings, ExitCode
 
 ### 复用原则
 1. **引入优先**：生成代码前，先确认 `skills_generator` 已有对应功能。有则引入，无才新建。
-2. **skill_root 参数**：`load_settings()` 和 `setup_logging()` 建议显式传入消费方的 `skill_root`（即 `Path(__file__).resolve().parent.parent`），确保配置和日志路径正确解析。
+2. **日志初始化**：优先调用免配置的 `init_logging()`（读取框架 `settings.logging` 默认值，技能进程复用主进程行为）；如需自定义输出目标，再改用 `setup_logging(log_dir=..., skill_root=...)` 手动传参。`load_settings()` 建议显式传入消费方的 `skill_root`（即 `Path(__file__).resolve().parent.parent`），确保配置和日志路径正确解析。
 
 ## 📁 目录结构规范
 ```

@@ -6,7 +6,7 @@ from .components import (
     AlertComponent,
     KeyValueComponent,
 )
-from skillforge.logging import setup_logging, logger
+from skillforge.logging import init_logging, setup_logging
 from .errors import ExitCode, raise_exit, ensure_config, handle_httpx_errors
 
 from .http import (
@@ -39,7 +39,7 @@ __all__ = [
     "KeyValueComponent",
     # Logging
     "setup_logging",
-    "logger",
+    "init_logging",
     # Errors
     "ExitCode",
     "raise_exit",
